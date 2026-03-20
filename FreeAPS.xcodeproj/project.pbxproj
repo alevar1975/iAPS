@@ -490,6 +490,9 @@
 		F7E96C1B2F45433D00CD4878 /* MealsMacrosChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E96C142F45433D00CD4878 /* MealsMacrosChartView.swift */; };
 		F7E96C1C2F45433D00CD4878 /* MealsHistorySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E96C132F45433D00CD4878 /* MealsHistorySheet.swift */; };
 		F7E96C1D2F45433D00CD4878 /* MealDaySummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E96C0F2F45433D00CD4878 /* MealDaySummary.swift */; };
+		F7F623032F68AB22009FCE8A /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F623022F68AB1D009FCE8A /* KeychainHelper.swift */; };
+		F7F623052F68AB47009FCE8A /* IAPSKIServerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F623042F68AB42009FCE8A /* IAPSKIServerManager.swift */; };
+		F7F623072F68AB71009FCE8A /* IAPSKIConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F623062F68AB6E009FCE8A /* IAPSKIConfigView.swift */; };
 		F816825E28DB441200054060 /* HeartBeatManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F816825D28DB441200054060 /* HeartBeatManager.swift */; };
 		F816826028DB441800054060 /* BluetoothTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F816825F28DB441800054060 /* BluetoothTransmitter.swift */; };
 		F90692AA274B7AAE0037068D /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90692A9274B7AAE0037068D /* HealthKitManager.swift */; };
@@ -1154,6 +1157,9 @@
 		F7E96C132F45433D00CD4878 /* MealsHistorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealsHistorySheet.swift; sourceTree = "<group>"; };
 		F7E96C142F45433D00CD4878 /* MealsMacrosChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealsMacrosChartView.swift; sourceTree = "<group>"; };
 		F7E96C152F45433D00CD4878 /* MealsSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealsSummaryView.swift; sourceTree = "<group>"; };
+		F7F623022F68AB1D009FCE8A /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		F7F623042F68AB42009FCE8A /* IAPSKIServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPSKIServerManager.swift; sourceTree = "<group>"; };
+		F7F623062F68AB6E009FCE8A /* IAPSKIConfigView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPSKIConfigView.swift; sourceTree = "<group>"; };
 		F816825D28DB441200054060 /* HeartBeatManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HeartBeatManager.swift; sourceTree = "<group>"; };
 		F816825F28DB441800054060 /* BluetoothTransmitter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BluetoothTransmitter.swift; sourceTree = "<group>"; };
 		F90692A9274B7AAE0037068D /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
@@ -1633,6 +1639,7 @@
 		3811DE0325C9D31700A708ED /* Modules */ = {
 			isa = PBXGroup;
 			children = (
+				F7F622FC2F68A83E009FCE8A /* Netcup */,
 				F7E96C172F45433D00CD4878 /* Meals */,
 				6DC5D590658EF8B8DF94F9F5 /* AddCarbs */,
 				A9A4C88374496B3C89058A89 /* AddTempTarget */,
@@ -2931,6 +2938,16 @@
 			path = Meals;
 			sourceTree = "<group>";
 		};
+		F7F622FC2F68A83E009FCE8A /* Netcup */ = {
+			isa = PBXGroup;
+			children = (
+				F7F623062F68AB6E009FCE8A /* IAPSKIConfigView.swift */,
+				F7F623042F68AB42009FCE8A /* IAPSKIServerManager.swift */,
+				F7F623022F68AB1D009FCE8A /* KeychainHelper.swift */,
+			);
+			path = Netcup;
+			sourceTree = "<group>";
+		};
 		F90692A8274B7A980037068D /* HealthKit */ = {
 			isa = PBXGroup;
 			children = (
@@ -3323,6 +3340,7 @@
 				38B4F3C625E5017E00E76A18 /* NotificationCenter.swift in Sources */,
 				1947541C2D470F0500A89AD1 /* SuspendResumeShortcut.swift in Sources */,
 				19D466A729AA2C22004D5F33 /* FPUConfigStateModel.swift in Sources */,
+				F7F623072F68AB71009FCE8A /* IAPSKIConfigView.swift in Sources */,
 				38E44528274E401C00EC9A94 /* Protected.swift in Sources */,
 				3811DEB625C9D88300A708ED /* UnlockManager.swift in Sources */,
 				E00EEC0827368630002FF094 /* NetworkAssembly.swift in Sources */,
@@ -3337,6 +3355,7 @@
 				190EBCC629FF138000BA767D /* UIUXProvider.swift in Sources */,
 				38E98A2725F52C9300C0CED0 /* CollectionIssueReporter.swift in Sources */,
 				F29FC35F2E7F6EF800DC04FE /* DateExtensions.swift in Sources */,
+				F7F623032F68AB22009FCE8A /* KeychainHelper.swift in Sources */,
 				E00EEC0427368630002FF094 /* SecurityAssembly.swift in Sources */,
 				3811DEE825CA063400A708ED /* Injected.swift in Sources */,
 				3811DEAF25C9D88300A708ED /* KeyValueStorage.swift in Sources */,
@@ -3392,6 +3411,7 @@
 				3811DEEA25CA063400A708ED /* SyncAccess.swift in Sources */,
 				190EBCC829FF13AA00BA767D /* UIUXStateModel.swift in Sources */,
 				38BF021F25E7F0DE00579895 /* DeviceDataManager.swift in Sources */,
+				F7F623052F68AB47009FCE8A /* IAPSKIServerManager.swift in Sources */,
 				38A504A425DD9C4000C5B9E8 /* UserDefaultsExtensions.swift in Sources */,
 				38FE826A25CC82DB001FF17A /* NetworkService.swift in Sources */,
 				FE66D16B291F74F8005D6F77 /* Bundle+Extensions.swift in Sources */,

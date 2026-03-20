@@ -87,6 +87,7 @@ extension NightscoutConfig {
             return NightscoutAPI(url: url, secret: secret)
         }
 
+        /// Lädt die Einstellungen von Nightscout herunter (inkl. KI-Optimierungen)
         func importSettings() {
             guard let nightscout = nightscoutAPI else {
                 saveError("Can't access nightscoutAPI")
@@ -101,7 +102,7 @@ extension NightscoutConfig {
             components.queryItems = [URLQueryItem(name: "count", value: "1")]
 
             var request = URLRequest(url: components.url!)
-            // OPTIMIERUNG: Cache ignorieren, um immer die frischen KI-Profile zu laden
+            // Cache ignorieren, um immer die frischen KI-Profile zu laden
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.timeoutInterval = 30
 
@@ -126,7 +127,7 @@ extension NightscoutConfig {
 
                 do {
                     let fetchedProfileStore = try JSONCoding.decoder.decode([FetchedNightscoutProfileStore].self, from: data)
-                    // WICHTIG: Muss exakt "default" sein für den Sync mit deiner Berater-App
+                    // WICHTIG: Nutzt das "default" Profil für den Sync mit der KI-Berater-App
                     guard let fetchedProfile = fetchedProfileStore.first?.store["default"] else {
                         self.saveError("Default profile not found in NS")
                         return
@@ -138,7 +139,7 @@ extension NightscoutConfig {
                         return
                     }
 
-                    // 2. Basalraten (Synchronisation der 35,7 vs 37,88)
+                    // 2. Basalraten aufbereiten
                     let pumpName = self.apsManager.pumpName.value
                     let basals = fetchedProfile.basal.map { entry in
                         BasalProfileEntry(
@@ -148,13 +149,13 @@ extension NightscoutConfig {
                         )
                     }
 
-                    // Check auf 0-Raten (Omnipod Safety)
+                    // Sicherheit: 0-Raten Check
                     if pumpName != "Omnipod DASH", basals.contains(where: { $0.rate <= 0 }) {
                         self.saveError("Safety: 0 U/h basal detected in NS profile.")
                         return
                     }
 
-                    // 3. Andere Parameter (Sens, CarbRatio, Targets)
+                    // 3. Sensibilitäten, CarbRatios und Targets
                     let sensitivities = InsulinSensitivities(
                         units: self.units,
                         userPrefferedUnits: self.units,
@@ -175,7 +176,7 @@ extension NightscoutConfig {
                         }
                     )
 
-                    // 4. Sync zur Pumpe (LoopKit Integration)
+                    // 4. Synchronisation mit der Pumpe und lokalem Speicher
                     if let pump = self.deviceManager.pumpManager {
                         let syncValues = basals
                             .map { RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate)) }
@@ -189,7 +190,10 @@ extension NightscoutConfig {
                                     targets: targets,
                                     dia: fetchedProfile.dia
                                 )
-                                debug(.service, "Sync erfolgreich: \(basals.count) Basal-Segmente geladen.")
+                                debug(.service, "KI-Profil erfolgreich geladen: \(basals.count) Basal-Segmente.")
+
+                                // NEU: Nach dem Import auch die aktuellen Settings an Netcup melden
+                                IAPSKIServerManager.shared.uploadCurrentSettings(resolver: self.resolver)
                             } else {
                                 self.saveError("Pump sync failed")
                             }
@@ -265,26 +269,19 @@ extension NightscoutConfig {
                 return onePer5Min
             }
             .sink { [weak self] glucose in
-                guard let self = self else {
+                guard let self = self else { return }
+
+                guard glucose.isNotEmpty else {
+                    DispatchQueue.main.async { self.backfilling = false }
                     return
                 }
 
-                guard glucose.isNotEmpty else {
-                    DispatchQueue.main.async {
-                        self.backfilling = false
-                    }
-                    return
-                }
-                // glucose storage - store only last 24 hours
                 let cutOffDate = Date().addingTimeInterval(-1.days.timeInterval)
                 let recent = glucose.filter { $0.dateString >= cutOffDate }
                 _ = self.glucoseStorage.storeGlucose(recent)
 
-                // core date - store everything
                 coreDataStorageGlucoseSaver.storeGlucose(glucose) {
-                    DispatchQueue.main.async {
-                        self.backfilling = false
-                    }
+                    DispatchQueue.main.async { self.backfilling = false }
                 }
             }
             .store(in: &lifetime)
@@ -298,11 +295,7 @@ extension NightscoutConfig {
                 let readings = CoreDataStorage()
                     .fetchGlucose(interval: Date().addingTimeInterval(-Int(self.uploadInterval).days.timeInterval) as NSDate)
                 let bloodGlucose = readings.compactMap { reading -> BloodGlucose? in
-                    guard let date = reading.date,
-                          let id = reading.id
-                    else {
-                        return nil
-                    }
+                    guard let date = reading.date, let id = reading.id else { return nil }
                     return BloodGlucose(
                         _id: id,
                         sgv: Int(reading.glucose),
@@ -324,14 +317,10 @@ extension NightscoutConfig {
                 self.nightscoutManager.uploadOldGlucose(
                     bloodGlucose: bloodGlucose,
                     completion: {
-                        DispatchQueue.main.async {
-                            self.uploading = false
-                        }
+                        DispatchQueue.main.async { self.uploading = false }
                     },
                     progress: { progress in
-                        DispatchQueue.main.async {
-                            self.uploadingProgress = progress
-                        }
+                        DispatchQueue.main.async { self.uploadingProgress = progress }
                     }
                 )
             }

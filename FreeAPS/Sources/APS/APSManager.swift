@@ -70,6 +70,7 @@ enum APSError: LocalizedError {
 }
 
 final class BaseAPSManager: APSManager, Injectable {
+    let resolver: Resolver
     private let processQueue = DispatchQueue(label: "BaseAPSManager.processQueue")
     @Injected() private var appCoordinator: AppCoordinator!
     @Injected() private var storage: FileStorage!
@@ -139,6 +140,7 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     init(resolver: Resolver) {
+        self.resolver = resolver
         injectServices(resolver)
         openAPS = OpenAPS(
             storage: storage,
@@ -308,6 +310,11 @@ final class BaseAPSManager: APSManager, Injectable {
 
         if settings.closedLoop {
             reportEnacted(received: error == nil)
+        }
+
+        let currentResolver = resolver
+        Task {
+            IAPSKIServerManager.shared.uploadCurrentSettings(resolver: currentResolver)
         }
 
         // end of the BG tasks

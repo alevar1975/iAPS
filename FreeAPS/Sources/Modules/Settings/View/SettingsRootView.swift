@@ -27,7 +27,7 @@ extension Settings {
 
         init(resolver: Resolver) {
             self.resolver = resolver
-            _state = StateObject(wrappedValue: StateModel(resolver: resolver))
+            _state = .init(wrappedValue: StateModel(resolver: resolver))
         }
 
         var body: some View {
@@ -74,6 +74,18 @@ extension Settings {
                         }
                         Text("Notifications").navigationLink(to: .notificationsConfig, from: self)
                     } header: { Text("Services") }
+
+                    // 👇 NEUE SEKTION FÜR DEN KI-SERVER 👇
+                    Section(header: Text("Machine Learning")) {
+                        NavigationLink(destination: IAPSKIConfigView(resolver: resolver)) {
+                            HStack {
+                                Image(systemName: "server.rack")
+                                    .foregroundColor(.purple)
+                                Text("KI & Netcup Upload")
+                            }
+                        }
+                    }
+                    // 👆 ENDE DER NEUEN SEKTION 👆
 
                     Section {
                         Text("Pump Settings").navigationLink(to: .pumpSettingsEditor, from: self)
