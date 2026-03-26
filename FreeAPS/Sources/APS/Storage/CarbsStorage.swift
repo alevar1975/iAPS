@@ -12,7 +12,9 @@ protocol CarbsStorage {
     func syncDate() -> Date
     func recent() -> [CarbsEntry]
     func nightscoutTretmentsNotUploaded() -> [NigtscoutTreatment]
+    func allNightscoutTreatments() -> [NigtscoutTreatment]
     func deleteCarbsAndFPUs(at date: Date)
+    func deleteOldRecords(olderThanDays: Int)
 }
 
 final class BaseCarbsStorage: CarbsStorage, Injectable {
@@ -38,20 +40,18 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
             let note = entries.last?.note
             let creationDate = entries.last?.createdAt ?? Date.now
 
-            // EFFICIENCY: Combine all file operations into a single transaction
             self.storage.transaction { storage in
 
                 // -------------------------- FPU --------------------------------------
                 if fat > 0 || protein > 0 {
-                    let interval = settings.settings.minuteInterval // Interval between carbs
-                    let timeCap = settings.settings.timeCap // Max Duration
+                    let interval = settings.settings.minuteInterval
+                    let timeCap = settings.settings.timeCap
                     let adjustment = settings.settings.individualAdjustmentFactor
-                    let delay = settings.settings.delay // Time before first future carb entry
+                    let delay = settings.settings.delay
                     let kcal = protein * 4 + fat * 9
                     let carbEquivalents = (kcal / 10) * adjustment
                     let fpus = carbEquivalents / 10
 
-                    // Duration in hours used for extended boluses with Warsaw Method. Here used for total duration of the computed carb equivalents instead, excluding the configurable delay.
                     var computedDuration = 0
                     switch fpus {
                     case ..<2:
@@ -64,16 +64,11 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                         computedDuration = timeCap
                     }
 
-                    // Size of each created carb equivalent if 60 minutes interval
                     var equivalent: Decimal = carbEquivalents / Decimal(computedDuration)
-                    // Adjust for interval setting other than 60 minutes
                     equivalent /= Decimal(60 / interval)
-                    // Round to 1 fraction digit
                     equivalent = Decimal(round(Double(equivalent * 10)) / 10)
-                    // Round up to 1 or done to 0 as oref0 only accepts carbs >= 1
                     equivalent = equivalent > IAPSconfig.minimumCarbEquivalent ? max(equivalent, 1) : 0
 
-                    // Number of equivalents
                     var numberOfEquivalents = equivalent > 0 ? carbEquivalents / equivalent : 0
                     var firstIndex = true
                     var useDate = entries.last?.actualDate ?? Date()
@@ -94,7 +89,6 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                         numberOfEquivalents -= 1
                     }
 
-                    // Append FPUs once
                     if carbEquivalents > 0, !futureCarbArray.isEmpty {
                         storage.append(futureCarbArray, to: file, uniqBy: \.id)
                     }
@@ -115,7 +109,6 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                         kcal: nil
                     )
 
-                    // If fetched en masse from NS
                     if entries.filter({ $0.carbs > 0 }).count > 1 {
                         storage.append(entries, to: file, uniqBy: \.createdAt)
                     } else {
@@ -124,14 +117,11 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                 }
 
                 // ------------------------- CLEANUP & SAVE --------------------------------------
-                // Read the file ONCE, filter, sort, and save it.
                 uniqEvents = storage.retrieve(file, as: [CarbsEntry].self)?
                     .filter { $0.createdAt.addingTimeInterval(1.days.timeInterval) > Date() }
                     .sorted { $0.createdAt > $1.createdAt } ?? []
                 storage.save(Array(uniqEvents), as: file)
             }
-
-            // MARK: Save to CoreData. (Required for Statistics and Meal History)
 
             self.coredataContext.perform {
                 let carbDataForStats = Carbohydrates(context: self.coredataContext)
@@ -146,7 +136,6 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                     (Double(truncating: carbDataForStats.protein ?? 0) * 4.0)
 
                 carbDataForStats.kcal = NSDecimalNumber(value: kcalValue)
-
                 carbDataForStats.note = note
                 carbDataForStats.id = UUID().uuidString
                 carbDataForStats.date = creationDate
@@ -183,7 +172,9 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
         let uploaded = storage.retrieve(OpenAPS.Nightscout.uploadedCarbs, as: [NigtscoutTreatment].self) ?? []
 
         let eventsManual = recent()
-            .filter { ($0.enteredBy == CarbsEntry.manual || $0.enteredBy == CarbsEntry.remote) && $0.carbs > 0 }
+            .filter {
+                ($0.enteredBy == CarbsEntry.manual || $0.enteredBy == CarbsEntry.remote) &&
+                    ($0.carbs > 0 || ($0.fat ?? 0) > 0 || ($0.protein ?? 0) > 0) }
         let treatments = eventsManual.map {
             NigtscoutTreatment(
                 duration: nil,
@@ -197,8 +188,8 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                 bolus: nil,
                 insulin: nil,
                 carbs: $0.carbs,
-                fat: nil,
-                protein: nil,
+                fat: $0.fat,
+                protein: $0.protein,
                 foodType: $0.note,
                 targetTop: nil,
                 targetBottom: nil,
@@ -208,5 +199,72 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
             )
         }
         return Array(Set(treatments).subtracting(Set(uploaded)))
+    }
+
+    // 🟢 NEU: Holt ALLE Mahlzeiten für den Force Upload
+    func allNightscoutTreatments() -> [NigtscoutTreatment] {
+        let eventsManual = recent()
+            .filter {
+                ($0.enteredBy == CarbsEntry.manual || $0.enteredBy == CarbsEntry.remote) &&
+                    ($0.carbs > 0 || ($0.fat ?? 0) > 0 || ($0.protein ?? 0) > 0) }
+
+        return eventsManual.map {
+            NigtscoutTreatment(
+                duration: nil,
+                rawDuration: nil,
+                rawRate: nil,
+                absolute: nil,
+                rate: nil,
+                eventType: .nsCarbCorrection,
+                createdAt: $0.actualDate ?? .distantPast,
+                enteredBy: CarbsEntry.manual,
+                bolus: nil,
+                insulin: nil,
+                carbs: $0.carbs,
+                fat: $0.fat,
+                protein: $0.protein,
+                foodType: $0.note,
+                targetTop: nil,
+                targetBottom: nil,
+                id: $0.id,
+                fpuID: nil,
+                creation_date: $0.createdAt
+            )
+        }
+    }
+
+    // 🟢 NEU: Ermittelt die Statistik für die UI
+    func getMacroStats() -> (count: Int, oldestDate: Date?) {
+        let allValues = storage.retrieve(OpenAPS.Monitor.carbHistory, as: [CarbsEntry].self) ?? []
+        let count = allValues.count
+        let oldest = allValues.min(by: { $0.createdAt < $1.createdAt })?.createdAt
+        return (count, oldest)
+    }
+
+    // 🟢 NEU: Löscht alle Daten, die älter als X Tage sind
+    func deleteOldRecords(olderThanDays: Int) {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -olderThanDays, to: Date()) ?? Date()
+
+        processQueue.sync {
+            var allValues = storage.retrieve(OpenAPS.Monitor.carbHistory, as: [CarbsEntry].self) ?? []
+            allValues.removeAll(where: { $0.createdAt < cutoff })
+            storage.save(allValues, as: OpenAPS.Monitor.carbHistory)
+
+            var uploaded = storage.retrieve(OpenAPS.Nightscout.uploadedCarbs, as: [NigtscoutTreatment].self) ?? []
+            uploaded.removeAll(where: { ($0.createdAt ?? .distantFuture) < cutoff })
+            storage.save(uploaded, as: OpenAPS.Nightscout.uploadedCarbs)
+        }
+
+        coredataContext.perform {
+            let fetchRequest = Carbohydrates.fetchRequest() as NSFetchRequest<Carbohydrates>
+            fetchRequest.predicate = NSPredicate(format: "date < %@", cutoff as NSDate)
+            do {
+                let oldEntries = try self.coredataContext.fetch(fetchRequest)
+                for entry in oldEntries {
+                    self.coredataContext.delete(entry)
+                }
+                if self.coredataContext.hasChanges { try self.coredataContext.save() }
+            } catch {}
+        }
     }
 }

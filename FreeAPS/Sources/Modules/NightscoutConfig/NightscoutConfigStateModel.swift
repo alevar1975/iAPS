@@ -15,6 +15,7 @@ extension NightscoutConfig {
         @Injected() private var coreDataStorageGlucoseSaver: CoreDataStorageGlucoseSaver!
         @Injected() var apsManager: APSManager!
         @Injected() var deviceManager: DeviceDataManager!
+        @Injected() private var carbsStorage: CarbsStorage!
 
         private let processQueue = DispatchQueue(label: "NightscoutConfig.StateModel.processQueue")
         let coredataContext = CoreDataStack.shared.persistentContainer.viewContext
@@ -41,6 +42,9 @@ extension NightscoutConfig {
         @Published var uploadInterval: Decimal = 1 {
             didSet { uploadInterval = min(max(uploadInterval, 1), 90) }
         }
+
+        // 🟢 NEU: Speichert die gefundenen Mahlzeiten für die UI-Vorschau
+        @Published var historicalMacros: [Carbohydrates] = []
 
         override func subscribe() {
             url = keychain.getValue(String.self, forKey: Config.urlKey) ?? ""
@@ -87,7 +91,6 @@ extension NightscoutConfig {
             return NightscoutAPI(url: url, secret: secret)
         }
 
-        /// Lädt die Einstellungen von Nightscout herunter (inkl. KI-Optimierungen)
         func importSettings() {
             guard let nightscout = nightscoutAPI else {
                 saveError("Can't access nightscoutAPI")
@@ -102,7 +105,6 @@ extension NightscoutConfig {
             components.queryItems = [URLQueryItem(name: "count", value: "1")]
 
             var request = URLRequest(url: components.url!)
-            // Cache ignorieren, um immer die frischen KI-Profile zu laden
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.timeoutInterval = 30
 
@@ -127,19 +129,16 @@ extension NightscoutConfig {
 
                 do {
                     let fetchedProfileStore = try JSONCoding.decoder.decode([FetchedNightscoutProfileStore].self, from: data)
-                    // WICHTIG: Nutzt das "default" Profil für den Sync mit der KI-Berater-App
                     guard let fetchedProfile = fetchedProfileStore.first?.store["default"] else {
                         self.saveError("Default profile not found in NS")
                         return
                     }
 
-                    // 1. Einheiten validieren
                     guard fetchedProfile.units.contains(self.units.rawValue.prefix(4)) else {
                         self.saveError("Unit mismatch: \(fetchedProfile.units) vs \(self.units.rawValue)")
                         return
                     }
 
-                    // 2. Basalraten aufbereiten
                     let pumpName = self.apsManager.pumpName.value
                     let basals = fetchedProfile.basal.map { entry in
                         BasalProfileEntry(
@@ -149,13 +148,11 @@ extension NightscoutConfig {
                         )
                     }
 
-                    // Sicherheit: 0-Raten Check
                     if pumpName != "Omnipod DASH", basals.contains(where: { $0.rate <= 0 }) {
                         self.saveError("Safety: 0 U/h basal detected in NS profile.")
                         return
                     }
 
-                    // 3. Sensibilitäten, CarbRatios und Targets
                     let sensitivities = InsulinSensitivities(
                         units: self.units,
                         userPrefferedUnits: self.units,
@@ -176,7 +173,6 @@ extension NightscoutConfig {
                         }
                     )
 
-                    // 4. Synchronisation mit der Pumpe und lokalem Speicher
                     if let pump = self.deviceManager.pumpManager {
                         let syncValues = basals
                             .map { RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate)) }
@@ -192,7 +188,6 @@ extension NightscoutConfig {
                                 )
                                 debug(.service, "KI-Profil erfolgreich geladen: \(basals.count) Basal-Segmente.")
 
-                                // NEU: Nach dem Import auch die aktuellen Settings an Netcup melden
                                 IAPSKIServerManager.shared.uploadCurrentSettings(resolver: self.resolver)
                             } else {
                                 self.saveError("Pump sync failed")
@@ -331,6 +326,34 @@ extension NightscoutConfig {
             keychain.removeObject(forKey: Config.secretKey)
             url = ""
             secret = ""
+        }
+
+        // 🟢 NEU: Holt die Makros nur zum Anzeigen in der Liste ab
+        func fetchHistoricalMacros() {
+            let cutoff = Calendar.current.date(byAdding: .day, value: -93, to: Date()) ?? Date()
+            let allData = CoreDataStorage().fetchMealData(interval: cutoff as NSDate)
+
+            // Filtere leere Einträge heraus, damit die Liste sauber bleibt
+            historicalMacros = allData.filter { meal in
+                let c = meal.carbs?.decimalValue ?? 0
+                let f = meal.fat?.decimalValue ?? 0
+                let p = meal.protein?.decimalValue ?? 0
+                return c > 0 || f > 0 || p > 0
+            }
+        }
+
+        // 🟢 NEU: Führt Upload durch und löscht danach
+        func uploadMacrosAndCleanUp() {
+            message = "Lade historische Makros hoch..."
+
+            nightscoutManager.forceUploadAllMacros()
+
+            // Verzögerung, um Nightscout Zeit zum Verarbeiten zu geben
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                self.carbsStorage.deleteOldRecords(olderThanDays: 93)
+                self.fetchHistoricalMacros() // Aktualisiert die Liste
+                self.message = "Upload abgeschlossen & bereinigt!"
+            }
         }
     }
 }

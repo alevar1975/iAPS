@@ -1,4 +1,3 @@
-
 import Combine
 import Foundation
 import Swinject
@@ -29,22 +28,54 @@ final class IAPSKIServerManager {
             let prefRaw = storage.retrieveRaw(OpenAPS.Settings.preferences) ?? "{}"
             let freeapsRaw = storage.retrieveRaw(OpenAPS.FreeAPS.settings) ?? "{}"
 
+            // Bevorzugt enacted.json, ansonsten Fallback auf suggested.json
+            let enactedRaw = storage.retrieveRaw(OpenAPS.Enact.enacted) ?? "{}"
+            let suggestedRaw = storage.retrieveRaw(OpenAPS.Enact.suggested) ?? "{}"
+
             let profile = self.parseRawJSON(profileRaw)
             let preferences = self.parseRawJSON(prefRaw)
             let freeapsSettings = self.parseRawJSON(freeapsRaw)
 
-            // 4. OpenAPS Basiswerte extrahieren
-            let currentISF = profile["sens"] as? Double ?? profile["isf"] as? Double ?? 0.0
-            let currentIC = profile["carb_ratio"] as? Double ?? profile["carbratio"] as? Double ?? 0.0
-            let currentBasal = profile["current_basal"] as? Double ?? profile["basal"] as? Double ?? 0.0
-            let currentMaxIOB = profile["max_iob"] as? Double ?? profile["maxIOB"] as? Double ?? 0.0
+            // Wenn enacted Werte hat, nehmen wir die, sonst suggested
+            let enactedData = self.parseRawJSON(enactedRaw)
+            let suggestedData = self.parseRawJSON(suggestedRaw)
+            let loopData = enactedData.isEmpty == false ? enactedData : suggestedData
+
+            // 4. Statische Werte extrahieren
+            let currentIC = (profile["carb_ratio"] as? NSNumber)?.doubleValue ?? (profile["carbratio"] as? NSNumber)?
+                .doubleValue ?? 0.0
+            let staticBasal = (profile["current_basal"] as? NSNumber)?.doubleValue ?? (profile["basal"] as? NSNumber)?
+                .doubleValue ?? 0.0
+            let currentMaxIOB = (profile["max_iob"] as? NSNumber)?.doubleValue ?? (profile["maxIOB"] as? NSNumber)?
+                .doubleValue ?? 0.0
+            let staticProfileISF = (profile["sens"] as? NSNumber)?.doubleValue ?? (profile["isf"] as? NSNumber)?
+                .doubleValue ?? 0.0
+
+            // 🟢 5. WERTE DIREKT AUS DEM "REASON" FELD EXTRAHIEREN
+            var dynamicISF = staticProfileISF
+            var dynamicBasal = staticBasal
+
+            if let reasonText = loopData["reason"] as? String {
+                // Den dynamischen ISF aus dem Reason-Feld holen (z.B. "ISF: 29 → 33")
+                let parsedISF = self.extractValueAfterArrow(from: reasonText, forKeyword: "ISF:")
+                if let parsedISF = parsedISF {
+                    dynamicISF = parsedISF
+                }
+
+                // Die dynamische Basalrate aus dem Reason-Feld holen (z.B. "Basal: 2.6 → 2.25")
+                let parsedBasal = self.extractValueAfterArrow(from: reasonText, forKeyword: "Basal:")
+                if let parsedBasal = parsedBasal {
+                    dynamicBasal = parsedBasal
+                }
+            }
 
             var payload: [String: Any] = [
                 "timestamp": ISO8601DateFormatter().string(from: Date()),
                 "openaps": [
-                    "isf": currentISF,
+                    "isf": dynamicISF, // 🟢 Dynamischer ISF (direkt aus dem iAPS Log)
+                    "basal": dynamicBasal, // 🟢 Dynamische Basalrate (direkt aus dem iAPS Log)
+                    "profile_isf": staticProfileISF, // 🟢 Profil-Referenzwert
                     "ic": currentIC,
-                    "basal": currentBasal,
                     "maxIOB": currentMaxIOB
                 ]
             ]
@@ -52,7 +83,7 @@ final class IAPSKIServerManager {
             var activeAlgorithm = "openaps_only"
             var algorithmSettings: [String: Any] = [:]
 
-            // 5. Mappen der AutoISF Werte für das Python-Skript
+            // 6. Mappen der AutoISF Werte für das Python-Skript
             algorithmSettings["bgAccelISFweight"] = self.extractDouble(
                 key1: "bgAccelISFweight",
                 key2: "bgAccel_ISF_weight",
@@ -69,12 +100,14 @@ final class IAPSKIServerManager {
             )
             algorithmSettings["higherISFrangeWeight"] = self.extractDouble(
                 key1: "higherISFrangeWeight",
+                key2: "higher_ISFrange_weight",
                 defaultVal: 2.0,
                 dict1: freeapsSettings,
                 dict2: preferences
             )
             algorithmSettings["lowerISFrangeWeight"] = self.extractDouble(
                 key1: "lowerISFrangeWeight",
+                key2: "lower_ISFrange_weight",
                 defaultVal: 3.0,
                 dict1: freeapsSettings,
                 dict2: preferences
@@ -106,8 +139,20 @@ final class IAPSKIServerManager {
                 dict1: freeapsSettings,
                 dict2: preferences
             )
+            algorithmSettings["dura_ISF_weight"] = self.extractDouble(
+                key1: "dura_ISF_weight",
+                defaultVal: 1.8,
+                dict1: freeapsSettings,
+                dict2: preferences
+            )
+            algorithmSettings["iob_threshold_percent"] = self.extractDouble(
+                key1: "iob_threshold_percent",
+                defaultVal: 50.0,
+                dict1: freeapsSettings,
+                dict2: preferences
+            )
 
-            // 6. Algorithmus-Logik: Welches System ist aktiv?
+            // 7. Algorithmus-Logik: Welches System ist aktiv?
             let useNewFormula = freeapsSettings["useNewFormula"] as? Bool ?? false
             let isAutoISFEnabled = (preferences["autoisf"] as? Bool) == true ||
                 (preferences["autoisf"] as? Int) == 1 ||
@@ -119,18 +164,46 @@ final class IAPSKIServerManager {
                 algorithmSettings["use_smb"] = freeapsSettings["allowSMB"] ?? false
             } else if isAutoISFEnabled {
                 activeAlgorithm = "autoisf"
-                algorithmSettings["iob_threshold_percent"] = preferences["iob_threshold_percent"] ?? 100
             }
 
             payload["active_algorithm"] = activeAlgorithm
             payload["algorithm_settings"] = algorithmSettings
 
-            // 7. Daten an den Netcup Server senden
+            // 8. Daten an den Netcup Server senden
             self.sendData(url: url, apiKey: apiKey, payload: payload)
         }
     }
 
-    // 🟢 Helfer-Funktion sicher auf Klassen-Ebene ausgelagert
+    // 🟢 HILFSFUNKTION: Sucht nach "ISF: 29 → 33" und gibt die 33.0 zurück
+    private func extractValueAfterArrow(from text: String, forKeyword keyword: String) -> Double? {
+        // Sucht den Start des Keywords (z.B. "ISF:")
+        guard let keywordRange = text.range(of: keyword) else { return nil }
+
+        // Schneidet den Text ab dem Keyword ab (z.B. " 29 → 33, CR: 15...")
+        let textAfterKeyword = text[keywordRange.upperBound...]
+
+        // Findet das nächste Komma, da iAPS die Werte im Reason-Feld mit Kommata trennt
+        let relevantPart: String
+        if let commaRange = textAfterKeyword.range(of: ",") {
+            relevantPart = String(textAfterKeyword[..<commaRange.lowerBound])
+        } else {
+            // Falls es der letzte Wert im String ist und kein Komma mehr kommt
+            relevantPart = String(textAfterKeyword)
+        }
+
+        // iAPS nutzt oft verschiedene Pfeil-Symbole (→ oder ->), wir prüfen auf beides
+        let arrowSymbols = ["→", "->"]
+        for arrow in arrowSymbols {
+            if let arrowRange = relevantPart.range(of: arrow) {
+                // Schneidet den Text ab dem Pfeil ab und entfernt Leerzeichen
+                let valueString = relevantPart[arrowRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                return Double(valueString)
+            }
+        }
+
+        return nil
+    }
+
     private func extractDouble(
         key1: String,
         key2: String? = nil,
@@ -138,11 +211,11 @@ final class IAPSKIServerManager {
         dict1: [String: Any],
         dict2: [String: Any]
     ) -> Double {
-        if let v = dict1[key1] as? Double { return v }
-        if let v = dict2[key1] as? Double { return v }
+        if let v = (dict1[key1] as? NSNumber)?.doubleValue { return v }
+        if let v = (dict2[key1] as? NSNumber)?.doubleValue { return v }
         if let k2 = key2 {
-            if let v = dict1[k2] as? Double { return v }
-            if let v = dict2[k2] as? Double { return v }
+            if let v = (dict1[k2] as? NSNumber)?.doubleValue { return v }
+            if let v = (dict2[k2] as? NSNumber)?.doubleValue { return v }
         }
         return defaultVal
     }
