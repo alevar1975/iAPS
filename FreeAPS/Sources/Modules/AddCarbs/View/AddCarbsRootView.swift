@@ -13,6 +13,10 @@ extension AddCarbs {
         @StateObject var state: StateModel
         @StateObject var foodSearchState = FoodSearchStateModel()
 
+        // 🟢 NEU: States für den Alert
+        @State private var activeRule: IAPSMealRule? = nil
+        @State private var showMealAlert = false
+
         @State var dish: String = ""
         @State var isPromptPresented = false
         @State var saved = false
@@ -93,7 +97,7 @@ extension AddCarbs {
                 Section {
                     mealPresets.padding(.vertical, 9)
 
-                    // 🚀 OPTIMIERUNG: Ausgelagerte Input-Zeile, damit die View nicht beim Tippen blockiert
+                    // 🚀 OPTIMIERUNG: Ausgelagerte Input-Zeile
                     MacroInputRow(title: "Carbs", color: .primary, value: $state.carbs, formatter: formatter)
 
                     if state.useFPUconversion {
@@ -152,8 +156,14 @@ extension AddCarbs {
 
                 Section {
                     Button {
-                        button.toggle()
-                        if button { state.add(override, fetch: editMode) }
+                        // 🟢 NEU: KI-Check vor dem Speichern der Mahlzeit!
+                        if let rule = state.evaluateMeal() {
+                            self.activeRule = rule
+                            self.showMealAlert = true
+                        } else {
+                            // Keine KI-Warnung, ganz normal weiter
+                            proceedWithSave()
+                        }
                     } label: {
                         Text(((state.skipBolus && !override && !editMode) || state.carbs <= 0) ? "Save" : "Continue")
                     }
@@ -179,6 +189,27 @@ extension AddCarbs {
                 )
             }
             .alert(isPresented: $saveAlert) { alert(food: selectedFoodItem) }
+            // 🟢 NEU: Der Alert, der aufpoppt, wenn die KI ein Muster bei der Mahlzeit erkennt
+            .alert(isPresented: $showMealAlert) {
+                Alert(
+                    title: Text("KI-Muster: \(activeRule?.category ?? "")"),
+                    message: Text(
+                        "iAPS unterschätzt diese Mahlzeit historisch um \(activeRule?.iapsUnderprediction ?? 0) mg/dL.\n\nDie KI empfiehlt ein Override von \(activeRule?.overridePct ?? 100)% für \(String(format: "%.1f", activeRule?.durationHours ?? 2.0)) Stunden."
+                    ),
+                    primaryButton: .default(Text("Ignorieren & Speichern")) {
+                        proceedWithSave()
+                    },
+                    secondaryButton: .default(Text("Verstanden & Speichern")) {
+                        proceedWithSave()
+                    }
+                )
+            }
+        }
+
+        // 🟢 NEU: Hilfsfunktion für den eigentlichen Speichervorgang
+        private func proceedWithSave() {
+            button.toggle()
+            if button { state.add(override, fetch: editMode) }
         }
 
         private var meal: Bool {

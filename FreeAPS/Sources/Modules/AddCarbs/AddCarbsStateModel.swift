@@ -2,6 +2,33 @@ import CoreData
 import Foundation
 import SwiftUI
 
+// 🟢 NEU: Lightweight Structs nur für die Mahlzeiten-Regeln der KI
+struct IAPSMealRule: Codable, Equatable {
+    let category: String
+    let overridePct: Int
+    let durationHours: Double
+    let expectedPeakHours: Double
+    let avgMaxBg: Int
+    let iapsUnderprediction: Int
+
+    enum CodingKeys: String, CodingKey {
+        case category
+        case overridePct = "override_pct"
+        case durationHours = "duration_hours"
+        case expectedPeakHours = "expected_peak_hours"
+        case avgMaxBg = "avg_max_bg"
+        case iapsUnderprediction = "iaps_underprediction"
+    }
+}
+
+struct IAPSActionsResponse: Codable {
+    let mealRules: [IAPSMealRule]?
+
+    enum CodingKeys: String, CodingKey {
+        case mealRules = "meal_rules"
+    }
+}
+
 extension AddCarbs {
     final class StateModel: BaseStateModel<Provider> {
         @Injected() var carbsStorage: CarbsStorage!
@@ -30,6 +57,9 @@ extension AddCarbs {
 
         @Published var combinedPresets: [(preset: Presets?, portions: Double)] = []
 
+        // 🟢 NEU: Speichert die KI-Regeln
+        @Published var mealRules: [IAPSMealRule] = []
+
         let now = Date.now
 
         let coredataContext = CoreDataStack.shared.persistentContainer.viewContext
@@ -43,6 +73,39 @@ extension AddCarbs {
             useFPUconversion = settingsManager.settings.useFPUconversion
             ai = settingsManager.settings.ai
             skipSave = settingsManager.settings.skipSave
+
+            // 🟢 NEU: Lade die Regeln stumm im Hintergrund von deinem Server
+            fetchMealRules()
+        }
+
+        // 🟢 NEU: Ladefunktion
+        func fetchMealRules() {
+            guard let url = URL(string: "https://alentestetkidiab.de/weekly_actions_latest.json") else { return }
+            URLSession.shared.dataTask(with: url) { data, _, _ in
+                guard let data = data else { return }
+                if let decoded = try? JSONDecoder().decode(IAPSActionsResponse.self, from: data) {
+                    DispatchQueue.main.async {
+                        self.mealRules = decoded.mealRules ?? []
+                    }
+                }
+            }.resume()
+        }
+
+        // 🟢 NEU: Auswertungsfunktion für die Eingabemaske
+        func evaluateMeal() -> IAPSMealRule? {
+            let c = NSDecimalNumber(decimal: carbs).doubleValue
+            let f = NSDecimalNumber(decimal: fat).doubleValue
+            let p = NSDecimalNumber(decimal: protein).doubleValue
+
+            var detectedCategory = ""
+            if f > 25 || p > 35 {
+                if c > 40 { detectedCategory = "Mixed (Pizza-Effekt)" }
+                else { detectedCategory = "High FPU (Fett/Protein)" }
+            } else if c > 30 {
+                detectedCategory = "High Carb"
+            }
+
+            return mealRules.first(where: { $0.category == detectedCategory })
         }
 
         func add(_ continue_: Bool, fetch: Bool) {
@@ -219,16 +282,13 @@ extension AddCarbs {
         private func hypo() {
             let os = OverrideStorage()
 
-            // Cancel any eventual Other Override already active
             if let activeOveride = os.fetchLatestOverride().first {
                 let presetName = os.isPresetName()
-                // Is the Override a Preset?
                 if let preset = presetName {
                     if let duration = os.cancelProfile() {
-                        // Update in Nightscout
                         nightscoutManager.editOverride(preset, duration, activeOveride.date ?? Date.now)
                     }
-                } else if activeOveride.isPreset { // Because hard coded Hypo treatment isn't actually a preset
+                } else if activeOveride.isPreset {
                     if let duration = os.cancelProfile() {
                         nightscoutManager.editOverride("📉", duration, activeOveride.date ?? Date.now)
                     }
@@ -244,7 +304,6 @@ extension AddCarbs {
             guard let profileID = id, profileID != "None" else {
                 return
             }
-            // Enable New Override
             if profileID == "Hypo Treatment" {
                 let override = OverridePresets(context: coredataContextBackground)
                 override.percentage = 90
@@ -256,7 +315,6 @@ extension AddCarbs {
                 override.date = Date.now
                 override.indefinite = false
                 os.overrideFromPreset(override, profileID)
-                // Upload to Nightscout
                 nightscoutManager.uploadOverride(
                     "📉",
                     Double(45),
