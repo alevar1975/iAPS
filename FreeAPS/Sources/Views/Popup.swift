@@ -24,7 +24,7 @@ struct Popup<T: View>: ViewModifier {
         GeometryReader { geometry in
             if isPresented {
                 popup
-                    .animation(type)
+                    .animation(type, value: isPresented)
                     .transition(.offset(x: 0, y: direction.offset(popupFrame: geometry.frame(in: .global))))
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: alignment)
             }
@@ -64,7 +64,8 @@ extension View {
         isPresented: Bool,
         alignment: Alignment = .center,
         direction: Popup<T>.Direction = .bottom,
-        type: Animation = .spring,
+        // 🟢 NEU: Physik-basierte Spring Animation als Default
+        type: Animation = .spring(response: 0.4, dampingFraction: 0.75),
         @ViewBuilder content: () -> T
     ) -> some View {
         modifier(Popup(isPresented: isPresented, alignment: alignment, direction: direction, type: type, content: content))

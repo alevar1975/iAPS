@@ -27,16 +27,18 @@ final class IAPSKIServerManager {
             let profileRaw = storage.retrieveRaw(OpenAPS.Settings.profile) ?? "{}"
             let prefRaw = storage.retrieveRaw(OpenAPS.Settings.preferences) ?? "{}"
             let freeapsRaw = storage.retrieveRaw(OpenAPS.FreeAPS.settings) ?? "{}"
+            let autoisfRaw = storage.retrieveRaw(OpenAPS.Settings.autoisf) ?? "{}"
+            let settingsRaw = storage.retrieveRaw(OpenAPS.Settings.settings) ?? "{}"
 
-            // Bevorzugt enacted.json, ansonsten Fallback auf suggested.json
             let enactedRaw = storage.retrieveRaw(OpenAPS.Enact.enacted) ?? "{}"
             let suggestedRaw = storage.retrieveRaw(OpenAPS.Enact.suggested) ?? "{}"
 
             let profile = self.parseRawJSON(profileRaw)
             let preferences = self.parseRawJSON(prefRaw)
             let freeapsSettings = self.parseRawJSON(freeapsRaw)
+            let autoisfData = self.parseRawJSON(autoisfRaw)
+            let pumpSettings = self.parseRawJSON(settingsRaw)
 
-            // Wenn enacted Werte hat, nehmen wir die, sonst suggested
             let enactedData = self.parseRawJSON(enactedRaw)
             let suggestedData = self.parseRawJSON(suggestedRaw)
             let loopData = enactedData.isEmpty == false ? enactedData : suggestedData
@@ -51,20 +53,16 @@ final class IAPSKIServerManager {
             let staticProfileISF = (profile["sens"] as? NSNumber)?.doubleValue ?? (profile["isf"] as? NSNumber)?
                 .doubleValue ?? 0.0
 
-            // 🟢 5. WERTE DIREKT AUS DEM "REASON" FELD EXTRAHIEREN
+            // 5. WERTE DIREKT AUS DEM "REASON" FELD EXTRAHIEREN (Regex-Präzision)
             var dynamicISF = staticProfileISF
             var dynamicBasal = staticBasal
 
             if let reasonText = loopData["reason"] as? String {
-                // Den dynamischen ISF aus dem Reason-Feld holen (z.B. "ISF: 29 → 33")
-                let parsedISF = self.extractValueAfterArrow(from: reasonText, forKeyword: "ISF:")
-                if let parsedISF = parsedISF {
+                if let parsedISF = self.extractValueFromReason(from: reasonText, forKeyword: "ISF:") {
                     dynamicISF = parsedISF
                 }
 
-                // Die dynamische Basalrate aus dem Reason-Feld holen (z.B. "Basal: 2.6 → 2.25")
-                let parsedBasal = self.extractValueAfterArrow(from: reasonText, forKeyword: "Basal:")
-                if let parsedBasal = parsedBasal {
+                if let parsedBasal = self.extractValueFromReason(from: reasonText, forKeyword: "Basal:") {
                     dynamicBasal = parsedBasal
                 }
             }
@@ -72,9 +70,9 @@ final class IAPSKIServerManager {
             var payload: [String: Any] = [
                 "timestamp": ISO8601DateFormatter().string(from: Date()),
                 "openaps": [
-                    "isf": dynamicISF, // 🟢 Dynamischer ISF (direkt aus dem iAPS Log)
-                    "basal": dynamicBasal, // 🟢 Dynamische Basalrate (direkt aus dem iAPS Log)
-                    "profile_isf": staticProfileISF, // 🟢 Profil-Referenzwert
+                    "isf": dynamicISF,
+                    "basal": dynamicBasal,
+                    "profile_isf": staticProfileISF,
                     "ic": currentIC,
                     "maxIOB": currentMaxIOB
                 ]
@@ -83,76 +81,63 @@ final class IAPSKIServerManager {
             var activeAlgorithm = "openaps_only"
             var algorithmSettings: [String: Any] = [:]
 
-            // 6. Mappen der AutoISF Werte für das Python-Skript
+            let dictsToSearch = [freeapsSettings, preferences, autoisfData, profile, pumpSettings]
+
+            // 6. Mappen der Settings
             algorithmSettings["bgAccelISFweight"] = self.extractDouble(
-                key1: "bgAccelISFweight",
-                key2: "bgAccel_ISF_weight",
+                keys: ["bgAccelISFweight", "bgAccel_ISF_weight"],
                 defaultVal: 0.17,
-                dict1: freeapsSettings,
-                dict2: preferences
+                dicts: dictsToSearch
             )
             algorithmSettings["bgBrakeISFweight"] = self.extractDouble(
-                key1: "bgBrakeISFweight",
-                key2: "bgBrake_ISF_weight",
+                keys: ["bgBrakeISFweight", "bgBrake_ISF_weight"],
                 defaultVal: 0.23,
-                dict1: freeapsSettings,
-                dict2: preferences
+                dicts: dictsToSearch
             )
             algorithmSettings["higherISFrangeWeight"] = self.extractDouble(
-                key1: "higherISFrangeWeight",
-                key2: "higher_ISFrange_weight",
+                keys: ["higherISFrangeWeight", "higher_ISFrange_weight"],
                 defaultVal: 2.0,
-                dict1: freeapsSettings,
-                dict2: preferences
+                dicts: dictsToSearch
             )
             algorithmSettings["lowerISFrangeWeight"] = self.extractDouble(
-                key1: "lowerISFrangeWeight",
-                key2: "lower_ISFrange_weight",
+                keys: ["lowerISFrangeWeight", "lower_ISFrange_weight"],
                 defaultVal: 3.0,
-                dict1: freeapsSettings,
-                dict2: preferences
-            )
-            algorithmSettings["autoISFhourlyChange"] = self.extractDouble(
-                key1: "autoISFhourlyChange",
-                defaultVal: 1.0,
-                dict1: freeapsSettings,
-                dict2: preferences
+                dicts: dictsToSearch
             )
             algorithmSettings["postMealISFweight"] = self.extractDouble(
-                key1: "postMealISFweight",
-                key2: "pp_ISF_weight",
+                keys: ["postMealISFweight", "pp_ISF_weight"],
                 defaultVal: 0.05,
-                dict1: freeapsSettings,
-                dict2: preferences
+                dicts: dictsToSearch
             )
             algorithmSettings["autoisf_max"] = self.extractDouble(
-                key1: "autoISFmax",
-                key2: "autoisf_max",
+                keys: ["autoISFmax", "autoisf_max"],
                 defaultVal: 1.2,
-                dict1: freeapsSettings,
-                dict2: preferences
+                dicts: dictsToSearch
             )
             algorithmSettings["autoisf_min"] = self.extractDouble(
-                key1: "autoISFmin",
-                key2: "autoisf_min",
+                keys: ["autoISFmin", "autoisf_min"],
                 defaultVal: 0.8,
-                dict1: freeapsSettings,
-                dict2: preferences
-            )
-            algorithmSettings["dura_ISF_weight"] = self.extractDouble(
-                key1: "dura_ISF_weight",
-                defaultVal: 1.8,
-                dict1: freeapsSettings,
-                dict2: preferences
-            )
-            algorithmSettings["iob_threshold_percent"] = self.extractDouble(
-                key1: "iob_threshold_percent",
-                defaultVal: 50.0,
-                dict1: freeapsSettings,
-                dict2: preferences
+                dicts: dictsToSearch
             )
 
-            // 7. Algorithmus-Logik: Welches System ist aktiv?
+            // 🟢 HIER IST DIE LÖSUNG FÜR DAS RÄTSEL!
+            // Wir lesen autoISFhourlyChange aus (was in der iAPS UI "Dauer (dura)" heißt)
+            let duraValue = self.extractDouble(
+                keys: ["autoISFhourlyChange"],
+                defaultVal: 1.0,
+                dicts: dictsToSearch
+            )
+            // Und übergeben es an die KI einmal unter dem Original-Namen und einmal als dura_ISF_weight
+            algorithmSettings["autoISFhourlyChange"] = duraValue
+            algorithmSettings["dura_ISF_weight"] = duraValue
+
+            algorithmSettings["iob_threshold_percent"] = self.extractDouble(
+                keys: ["iobThresholdPercent", "iob_threshold_percent"],
+                defaultVal: 50.0,
+                dicts: dictsToSearch
+            )
+
+            // 7. Algorithmus-Logik
             let useNewFormula = freeapsSettings["useNewFormula"] as? Bool ?? false
             let isAutoISFEnabled = (preferences["autoisf"] as? Bool) == true ||
                 (preferences["autoisf"] as? Int) == 1 ||
@@ -174,48 +159,65 @@ final class IAPSKIServerManager {
         }
     }
 
-    // 🟢 HILFSFUNKTION: Sucht nach "ISF: 29 → 33" und gibt die 33.0 zurück
-    private func extractValueAfterArrow(from text: String, forKeyword keyword: String) -> Double? {
-        // Sucht den Start des Keywords (z.B. "ISF:")
+    // 🟢 HILFSFUNKTION 1: Extraktion mit Regex
+    private func extractValueFromReason(from text: String, forKeyword keyword: String) -> Double? {
         guard let keywordRange = text.range(of: keyword) else { return nil }
-
-        // Schneidet den Text ab dem Keyword ab (z.B. " 29 → 33, CR: 15...")
         let textAfterKeyword = text[keywordRange.upperBound...]
 
-        // Findet das nächste Komma, da iAPS die Werte im Reason-Feld mit Kommata trennt
         let relevantPart: String
         if let commaRange = textAfterKeyword.range(of: ",") {
             relevantPart = String(textAfterKeyword[..<commaRange.lowerBound])
         } else {
-            // Falls es der letzte Wert im String ist und kein Komma mehr kommt
             relevantPart = String(textAfterKeyword)
         }
 
-        // iAPS nutzt oft verschiedene Pfeil-Symbole (→ oder ->), wir prüfen auf beides
+        var targetString = relevantPart
         let arrowSymbols = ["→", "->"]
         for arrow in arrowSymbols {
             if let arrowRange = relevantPart.range(of: arrow) {
-                // Schneidet den Text ab dem Pfeil ab und entfernt Leerzeichen
-                let valueString = relevantPart[arrowRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
-                return Double(valueString)
+                targetString = String(relevantPart[arrowRange.upperBound...])
+                break
             }
+        }
+
+        let numberRegex = "[0-9]+([.][0-9]+)?"
+        if let range = targetString.range(of: numberRegex, options: .regularExpression) {
+            return Double(targetString[range])
         }
 
         return nil
     }
 
+    // 🟢 HILFSFUNKTION 2: Der rekursive Extractor
+    private func extractDoubleRecursive(keys: [String], dict: [String: Any]) -> Double? {
+        for (dictKey, dictVal) in dict {
+            let normalizedDictKey = dictKey.lowercased().replacingOccurrences(of: "_", with: "")
+            for key in keys {
+                let normalizedKey = key.lowercased().replacingOccurrences(of: "_", with: "")
+                if normalizedDictKey == normalizedKey {
+                    if let num = dictVal as? NSNumber { return num.doubleValue }
+                    if let str = dictVal as? String, let num = Double(str) { return num }
+                }
+            }
+
+            if let subDict = dictVal as? [String: Any] {
+                if let found = extractDoubleRecursive(keys: keys, dict: subDict) {
+                    return found
+                }
+            }
+        }
+        return nil
+    }
+
     private func extractDouble(
-        key1: String,
-        key2: String? = nil,
+        keys: [String],
         defaultVal: Double,
-        dict1: [String: Any],
-        dict2: [String: Any]
+        dicts: [[String: Any]]
     ) -> Double {
-        if let v = (dict1[key1] as? NSNumber)?.doubleValue { return v }
-        if let v = (dict2[key1] as? NSNumber)?.doubleValue { return v }
-        if let k2 = key2 {
-            if let v = (dict1[k2] as? NSNumber)?.doubleValue { return v }
-            if let v = (dict2[k2] as? NSNumber)?.doubleValue { return v }
+        for dict in dicts {
+            if let found = extractDoubleRecursive(keys: keys, dict: dict) {
+                return found
+            }
         }
         return defaultVal
     }

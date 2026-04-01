@@ -15,7 +15,7 @@ public struct DecimalTextField: UIViewRepresentable {
     var autofocus: Bool
     var cleanInput: Bool
     var allowDecimalSeparator: Bool
-    var liveEditing: Bool // when true: update the value as the user types; when false: only update the value when the user finishes typing (closes the keyboard)
+    var liveEditing: Bool
 
     public init(
         _ placeholder: String,
@@ -51,7 +51,6 @@ public struct DecimalTextField: UIViewRepresentable {
     }
 
     private func valueAsText() -> String? {
-        /// show no value initially, i.e. empty String
         value == 0 ? "" : formatter.string(for: value)
     }
 
@@ -63,6 +62,10 @@ public struct DecimalTextField: UIViewRepresentable {
         textField.delegate = context.coordinator
         textField.text = valueAsText()
         textField.placeholder = placeholder
+
+        // 🟢 NEU: Ein moderner, farbiger Cursor-Glow statt dem Standard-Blau
+        textField.tintColor = UIColor(Color.purple)
+
         return textField
     }
 
@@ -141,6 +144,8 @@ public struct DecimalTextField: UIViewRepresentable {
 
         @objc fileprivate func clearText() {
             textField?.text = ""
+            // 🟢 NEU: Haptisches Feedback beim Löschen
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         }
 
         @objc func cancelEdit() {
@@ -157,7 +162,6 @@ public struct DecimalTextField: UIViewRepresentable {
 
         @objc public func textFieldDidEndEditing(_: UITextField) {
             guard let textField = self.textField else { return }
-
             let proposedText = textField.text ?? ""
 
             if let number = parent.formatter.number(from: proposedText) {
@@ -165,7 +169,6 @@ public struct DecimalTextField: UIViewRepresentable {
                 parent.value = decimalNumber
                 textField.text = parent.formatter.string(for: decimalNumber) ?? ""
             } else {
-                // invalid input - reset to the original value
                 textField.text = parent.valueAsText()
             }
             isEditing = false
@@ -174,7 +177,6 @@ public struct DecimalTextField: UIViewRepresentable {
         private func handleUpdatedInput() {
             guard parent.liveEditing else { return }
             guard let textField = self.textField else { return }
-
             let proposedText = textField.text ?? ""
 
             if let number = parent.formatter.number(from: proposedText) {
@@ -182,7 +184,6 @@ public struct DecimalTextField: UIViewRepresentable {
                 parent.value = decimalNumber
                 previousSeenValue = decimalNumber
             } else {
-                // invalid input, set value to 0
                 parent.value = 0
             }
         }
@@ -197,17 +198,13 @@ extension DecimalTextField.Coordinator: UITextFieldDelegate {
         shouldChangeCharactersIn range: NSRange,
         replacementString string: String
     ) -> Bool {
-        // Check if the input is a number or the decimal separator
         let isAllowed = allowedCharacters.isSuperset(of: CharacterSet(charactersIn: string))
         if !isAllowed { return false }
 
         if let text = textField.text {
             let newText = (text as NSString).replacingCharacters(in: range, with: string)
-
             let decimalSeparatorCount = newText.filter({ $0 == (parent.formatter.decimalSeparator.first ?? ".") }).count
-            if decimalSeparatorCount > 1 {
-                return false
-            }
+            if decimalSeparatorCount > 1 { return false }
 
             textField.text = newText
             handleUpdatedInput()

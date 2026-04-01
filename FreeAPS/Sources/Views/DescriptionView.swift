@@ -21,6 +21,9 @@ struct DescriptionView<T: View>: ViewModifier {
             if isPresented {
                 description
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: alignment)
+                    // 🟢 NEU: Weiches Einblenden wie beim Apple "Dynamic Island"
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPresented)
             }
         }
     }
@@ -46,10 +49,16 @@ struct DescriptionLayout: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(.all, 20)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(Color.primary) // Passt sich Hell/Dunkel an
+            // 🟢 NEU: Apple Glassmorphism
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(colorScheme == .dark ? Color(.darkerGray) : Color(.gray))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
             )
+            .shadow(color: .black.opacity(0.2), radius: 15, x: 0, y: 10)
     }
 }

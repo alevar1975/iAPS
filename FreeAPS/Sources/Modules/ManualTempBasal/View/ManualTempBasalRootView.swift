@@ -28,7 +28,7 @@ extension ManualTempBasal {
                         Text("U/hr").foregroundColor(.secondary)
                     }
                     Picker(selection: $state.durationIndex, label: Text("Duration")) {
-                        ForEach(0 ..< state.durationValues.count) { index in
+                        ForEach(0 ..< state.durationValues.count, id: \.self) { index in
                             Text(
                                 String(
                                     format: "%.0f h %02.0f min",
@@ -40,12 +40,41 @@ extension ManualTempBasal {
                     }
                 }
 
+                // 🟢 NEU: Prominente, große Action-Buttons mit Haptik
                 Section {
-                    Button { state.enact() }
-                    label: { Text("Enact") }
-                    Button { state.cancel() }
-                    label: { Text("Cancel Temp Basal") }
+                    VStack(spacing: 12) {
+                        Button {
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            state.enact()
+                        } label: {
+                            Text("Enact")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+
+                        Button {
+                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                            state.cancel()
+                        } label: {
+                            Text("Cancel Temp Basal")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.red.opacity(0.8))
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                    }
                 }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .padding(.vertical, 10)
             }
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .navigationTitle("Manual Temp Basal")

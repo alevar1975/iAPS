@@ -71,8 +71,10 @@ struct AICameraView: View {
                                 }
                             }
                             .padding()
-                            .background(Color(.systemGray6))
+                            // 🟢 NEU: Apple Glass Look für den Tipp-Bereich
+                            .background(.ultraThinMaterial)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
                         }
 
                         Spacer()
@@ -362,7 +364,6 @@ struct AICameraView: View {
                 await MainActor.run {
                     addTelemetryLog("❌ Analysis failed")
 
-                    // ✅ VERBESSERT: Stabilere Fehlerbehandlung
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         showTelemetry = false
                         isAnalyzing = false
@@ -473,7 +474,7 @@ struct TelemetryWindow: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color(.systemGray6))
+            .background(Color(.systemGray6).opacity(0.8))
 
             // Scrolling logs
             ScrollView {
@@ -511,14 +512,15 @@ struct TelemetryWindow: View {
             }
             .padding(.bottom, 14)
             .frame(height: 320)
-            .background(Color(.systemBackground))
         }
-        .background(Color(.systemGray6))
+        // 🟢 NEU: Telemetry Window als edles Glas-Element
+        .background(.ultraThinMaterial)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(.systemGray4), lineWidth: 1)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
         .padding(.top, 8)
     }
 }

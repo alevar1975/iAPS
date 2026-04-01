@@ -3,96 +3,103 @@ import Foundation
 import SwiftUI
 import Swinject
 
+// 🟢 NEU: Hochperformantes natives Layout (ersetzt den GeometryReader-Hack)
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let result = FlowResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
+        for row in result.rows {
+            let rowYOffset = row.map(\.yOffset).min() ?? 0
+            for index in row.indices {
+                let x = bounds.minX + row[index].xOffset
+                let y = bounds.minY + row[index].yOffset - rowYOffset + result.rowOffsets[row[index].rowIndex]
+                subviews[row[index].index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(row[index].size))
+            }
+        }
+    }
+
+    struct FlowResult {
+        var size: CGSize = .zero
+        var rows: [[(index: Int, size: CGSize, xOffset: CGFloat, yOffset: CGFloat, rowIndex: Int)]] = []
+        var rowOffsets: [CGFloat] = []
+
+        init(in maxWidth: CGFloat, subviews: Layout.Subviews, spacing: CGFloat) {
+            var currentX: CGFloat = 0
+            var currentY: CGFloat = 0
+            var currentRowMaxHeight: CGFloat = 0
+            var currentRow: [(index: Int, size: CGSize, xOffset: CGFloat, yOffset: CGFloat, rowIndex: Int)] = []
+            var rowIndex = 0
+
+            for (index, subview) in subviews.enumerated() {
+                let size = subview.sizeThatFits(.unspecified)
+                if currentX + size.width > maxWidth, !currentRow.isEmpty {
+                    rows.append(currentRow)
+                    rowOffsets.append(currentY)
+                    currentRow = []
+                    currentX = 0
+                    currentY += currentRowMaxHeight + spacing
+                    currentRowMaxHeight = 0
+                    rowIndex += 1
+                }
+                currentRow.append((index, size, currentX, currentY, rowIndex))
+                currentX += size.width + spacing
+                currentRowMaxHeight = max(currentRowMaxHeight, size.height)
+            }
+            if !currentRow.isEmpty {
+                rows.append(currentRow)
+                rowOffsets.append(currentY)
+            }
+            size = CGSize(width: maxWidth, height: currentY + currentRowMaxHeight)
+        }
+    }
+}
+
 struct TagCloudView: View {
     var tags: [String]
 
-    @State private var totalHeight
-//          = CGFloat.zero       // << variant for ScrollView/List
-        = CGFloat.infinity // << variant for VStack
     var body: some View {
-        VStack {
-            GeometryReader { geometry in
-                self.generateContent(in: geometry)
-            }
-        }
-//        .frame(height: totalHeight)// << variant for ScrollView/List
-        .frame(maxHeight: totalHeight) // << variant for VStack
-    }
-
-    private func generateContent(in g: GeometryProxy) -> some View {
-        var width = CGFloat.zero
-        var height = CGFloat.zero
-
-        return ZStack(alignment: .topLeading) {
+        // 🟢 Die UI ist jetzt extrem sauber und blitzschnell!
+        FlowLayout(spacing: 6) {
             ForEach(self.tags, id: \.self) { tag in
                 self.item(for: tag)
-                    .padding([.horizontal, .vertical], 2)
-                    .alignmentGuide(.leading, computeValue: { d in
-                        if abs(width - d.width) > g.size.width
-                        {
-                            width = 0
-                            height -= d.height
-                        }
-                        let result = width
-                        if tag == self.tags.last! {
-                            width = 0 // last item
-                        } else {
-                            width -= d.width
-                        }
-                        return result
-                    })
-                    .alignmentGuide(.top, computeValue: { _ in
-                        let result = height
-                        if tag == self.tags.last! {
-                            height = 0 // last item
-                        }
-                        return result
-                    })
             }
-        }.background(viewHeightReader($totalHeight))
+        }
     }
 
     private func item(for textTag: String) -> some View {
         var colorOfTag: Color {
             switch textTag {
-            case textTag where textTag.contains("SMB Delivery Ratio:"):
+            case let t where t.contains("SMB Delivery Ratio:"):
                 return .uam
-            case textTag where textTag.contains("Bolus"),
-                 textTag where textTag.contains("Insulin 24h:"):
+            case let t where t.contains("Bolus") || t.contains("Insulin 24h:"):
                 return .purple
-            case textTag where textTag.contains("tdd_factor"),
-                 textTag where textTag.contains("Sigmoid function"),
-                 textTag where textTag.contains("Logarithmic function"),
-                 textTag where textTag.contains("AF:"),
-                 textTag where textTag.contains("Autosens/Dynamic Limit:"),
-                 textTag where textTag.contains("Dynamic ISF/CR"),
-                 textTag where textTag.contains("Dynamic Ratio"),
-                 textTag where textTag.contains("Auto ISF"):
+            case let t
+                where t.contains("tdd_factor") || t.contains("Sigmoid") || t.contains("Logarithmic") || t.contains("AF:") || t
+                .contains("Autosens/Dynamic Limit:") || t.contains("Dynamic ISF/CR") || t.contains("Dynamic Ratio") || t
+                .contains("Auto ISF"):
                 return .purple
-            case textTag where textTag.contains("Middleware:"):
+            case let t where t.contains("Middleware:"):
                 return .red
             default:
                 return .insulin
             }
         }
 
-        return ZStack { Text(textTag)
-            .padding(.vertical, 2)
-            .padding(.horizontal, 4)
-            .font(.suggestionParts)
-            .background(colorOfTag.opacity(0.8))
-            .foregroundColor(Color.white)
-            .cornerRadius(2) }
-    }
-
-    private func viewHeightReader(_ binding: Binding<CGFloat>) -> some View {
-        GeometryReader { geometry -> Color in
-            let rect = geometry.frame(in: .local)
-            DispatchQueue.main.async {
-                binding.wrappedValue = rect.size.height
-            }
-            return .clear
-        }
+        return Text(textTag)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .font(.system(size: 12, weight: .bold, design: .rounded))
+            .background(colorOfTag.opacity(0.85))
+            .foregroundColor(.white)
+            .cornerRadius(6)
+            // 🟢 Räumlicher Schatten für die Tags
+            .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
     }
 }
 

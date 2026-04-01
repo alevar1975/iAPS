@@ -30,19 +30,17 @@ struct SelectedFoodView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 20) {
+            // 1. HEADER: Bild, Titel und Tags (Vollständig erhalten inkl. AsyncImage)
+            HStack(alignment: .top, spacing: 16) {
                 Group {
                     if let foodImage = foodImage {
                         Image(uiImage: foodImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 75, height: 75)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: .black.opacity(0.15), radius: 5, x: 0, y: 3)
                     } else if let imageURLString = food.imageURL,
                               let imageURL = URL(string: imageURLString)
                     {
@@ -56,7 +54,8 @@ struct SelectedFoodView: View {
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
                                     .frame(width: 75, height: 75)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .shadow(color: .black.opacity(0.15), radius: 5, x: 0, y: 3)
                             case .failure:
                                 placeholderImage
                             @unknown default:
@@ -68,19 +67,19 @@ struct SelectedFoodView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(food.name)
-                        .font(.headline)
-                        .fontWeight(.medium)
+                        .font(.system(.title3, design: .rounded, weight: .bold))
                         .foregroundColor(.primary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    // Tags: AI Analysis oder 100g
                     HStack(spacing: 4) {
-                        Image(systemName: isAIAnalysisProduct(food) ? "brain" : "scalemass")
+                        Image(systemName: isAIProduct ? "brain" : "scalemass")
                             .font(.caption)
 
-                        if isAIAnalysisProduct(food) {
+                        if isAIProduct {
                             Text("AI Analysis")
                                 .font(.caption)
                         } else if portionGrams == 100.0 {
@@ -88,104 +87,83 @@ struct SelectedFoodView: View {
                                 .font(.caption)
                         }
                     }
-                    .fontWeight(.semibold)
+                    .font(.system(.caption, design: .rounded, weight: .bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
-                        isAIAnalysisProduct(food) ? Color.purple.opacity(0.2) :
-                            (portionGrams == 100.0 ? Color.blue.opacity(0.2) : Color.clear)
+                        isAIProduct ? Color.purple.opacity(0.15) :
+                            (portionGrams == 100.0 ? Color.blue.opacity(0.15) : Color.clear)
                     )
                     .foregroundColor(
-                        isAIAnalysisProduct(food) ? .purple :
+                        isAIProduct ? .purple :
                             (portionGrams == 100.0 ? .blue : .clear)
                     )
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(
-                                isAIAnalysisProduct(food) ? Color.purple.opacity(0.3) :
-                                    (portionGrams == 100.0 ? Color.blue.opacity(0.3) : Color.clear),
-                                lineWidth: 1
-                            )
-                    )
+                    .clipShape(Capsule())
+                }
+                Spacer()
+            }
+            .padding(.bottom, 4)
+
+            // 2. MAKROS: Das große, edle 2x2 Grid (iPhone 17 Style)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                NutritionBadge(value: displayCarbs, unit: "g", label: "Carbs", color: .blue, icon: "chart.pie.fill")
+                NutritionBadge(value: displayFat, unit: "g", label: "Fett", color: .orange, icon: "flame.fill")
+                NutritionBadge(value: displayProtein, unit: "g", label: "Protein", color: .red, icon: "bolt.heart.fill")
+                if food.calories > 0 {
+                    NutritionBadge(value: displayCalories, unit: " kcal", label: "Kalorien", color: .green, icon: "leaf.fill")
                 }
             }
 
-            if !isAIAnalysisProduct(food) {
+            // 3. PORTION & MULTIPLIER (Vollständig erhalten)
+            if !isAIProduct {
                 HStack {
-                    Text("Amount:")
-                        .font(.subheadline)
+                    Text("Menge / Portion:")
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
                         .foregroundColor(.secondary)
 
                     Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         showMultiplierEditor = true
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Text("\(portionGrams, specifier: "%.0f")g")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                                .font(.system(.headline, design: .rounded, weight: .bold))
                             Image(systemName: "pencil")
                                 .font(.system(size: 14, weight: .bold))
                         }
                         .foregroundColor(.blue)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(Color.blue.opacity(0.1))
-                        .cornerRadius(6)
+                        .cornerRadius(10)
                     }
                     .buttonStyle(PlainButtonStyle())
-
                     Spacer()
                 }
+                .padding(.top, 4)
             }
 
-            HStack(spacing: 8) {
-                NutritionBadge(
-                    value: displayCarbs,
-                    unit: "g",
-                    label: "Carbs",
-                    color: .orange,
-                    // icon: "c.square"
-                )
-                NutritionBadge(
-                    value: displayFat,
-                    unit: "g",
-                    label: "Fett",
-                    color: .blue,
-                    // icon: "f.square"
-                )
-                NutritionBadge(
-                    value: displayProtein,
-                    unit: "g",
-                    label: "Protein",
-                    color: .green,
-                    // icon: "p.square"
-                )
-                if food.calories > 0 {
-                    NutritionBadge(
-                        value: displayCalories,
-                        unit: "kcal",
-                        label: "Cal",
-                        color: .red,
-                        // icon: "flame"
-                    )
-                }
-            }
-
+            // 4. ACTION BUTTONS (Beide Buttons erhalten)
             HStack(spacing: 12) {
-                Button(action: onChange) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onChange()
+                } label: {
                     HStack {
                         Image(systemName: "arrow.clockwise")
-                        Text("Food")
+                        Text("Neu suchen")
                     }
-                    .font(.subheadline)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 16)
+                    .background(Color.secondary.opacity(0.15))
+                    .foregroundColor(.primary)
+                    .cornerRadius(16)
                 }
-                .buttonStyle(.bordered)
-                .tint(.blue)
+                .buttonStyle(PlainButtonStyle())
 
                 Button {
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
                     let adjustedFood = AIFoodItem(
                         name: food.name,
                         brand: food.brand,
@@ -199,34 +177,42 @@ struct SelectedFoodView: View {
                 } label: {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
-                        Text("Take Over")
+                        Text("Übernehmen")
                     }
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 16)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(16)
+                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(PlainButtonStyle())
             }
+            .padding(.top, 4)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        // .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+        // 5. KARTEN-STYLING & SHEET
+        .padding(20)
+        .background(.ultraThinMaterial)
+        .cornerRadius(24)
+        .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 10)
         .sheet(isPresented: $showMultiplierEditor) {
             MultiplierEditorView(grams: $portionGrams)
         }
     }
 
     private var placeholderImage: some View {
-        Image(systemName: "photo")
-            .frame(width: 60, height: 60)
-            .background(Color.gray.opacity(0.2))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .foregroundColor(.secondary)
+        ZStack {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.gray.opacity(0.1))
+                .frame(width: 75, height: 75)
+            Image(systemName: "fork.knife")
+                .font(.system(size: 24))
+                .foregroundColor(.gray.opacity(0.4))
+        }
     }
 
+    // 🟢 NEU: Das große, leuchtende Makro-Badge
     private struct NutritionBadge: View {
         let value: Double
         let unit: String
@@ -234,32 +220,32 @@ struct SelectedFoodView: View {
         let color: Color
         let icon: String
 
-        init(value: Double, unit: String, label: String, color: Color, icon: String? = nil) {
-            self.value = value
-            self.unit = unit
-            self.label = label
-            self.color = color
-            self.icon = icon ?? ""
-        }
-
         var body: some View {
-            HStack(spacing: 4) {
-                if !icon.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
                     Image(systemName: icon)
-                        .font(.system(size: 10))
+                        .font(.system(size: 14))
+                        .foregroundColor(color)
+                    Spacer()
                 }
-                VStack(spacing: 2) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("\(value, specifier: "%.1f")\(NSLocalizedString(unit, comment: ""))")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .foregroundColor(color)
+                        .contentTransition(.numericText()) // Rollt sanft beim Ändern!
                     Text(NSLocalizedString(label, comment: ""))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundColor(.secondary)
                 }
             }
-            .foregroundColor(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(color.opacity(0.15))
-            .cornerRadius(8)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.1))
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(color.opacity(0.2), lineWidth: 1)
+            )
         }
     }
 }
