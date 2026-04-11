@@ -13,7 +13,7 @@ extension AddCarbs {
         @StateObject var state: StateModel
         @StateObject var foodSearchState = FoodSearchStateModel()
 
-        // 🟢 NEU: States für den Alert
+        // States für den Alert
         @State private var activeRule: IAPSMealRule? = nil
         @State private var showMealAlert = false
 
@@ -82,65 +82,134 @@ extension AddCarbs {
 
         private var mealView: some View {
             Form {
-                state.ai ? foodSearch : nil
+                if state.ai {
+                    foodSearch
+                }
 
                 if let carbsReq = state.carbsRequired, state.carbs < carbsReq {
                     Section {
                         HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
                             Text("Carbs required")
+                                .fontWeight(.medium)
                             Spacer()
                             Text((formatter.string(from: carbsReq as NSNumber) ?? "") + " g")
+                                .bold()
+                                .foregroundColor(.orange)
                         }
                     }
                 }
 
                 Section {
-                    mealPresets.padding(.vertical, 9)
+                    mealPresets.padding(.vertical, 4)
 
-                    // 🚀 OPTIMIERUNG: Ausgelagerte Input-Zeile
-                    MacroInputRow(title: "Carbs", color: .primary, value: $state.carbs, formatter: formatter)
+                    MacroInputRow(
+                        title: "Carbs",
+                        icon: "leaf.fill",
+                        color: .primary,
+                        value: $state.carbs,
+                        formatter: formatter,
+                        unit: "g"
+                    )
 
                     if state.useFPUconversion {
-                        MacroInputRow(title: "Fat", color: .blue, value: $state.fat, formatter: formatter)
-                        MacroInputRow(title: "Protein", color: .green, value: $state.protein, formatter: formatter)
+                        MacroInputRow(
+                            title: "Fat",
+                            icon: "drop.fill",
+                            color: .blue,
+                            value: $state.fat,
+                            formatter: formatter,
+                            unit: "g"
+                        )
+                        MacroInputRow(
+                            title: "Protein",
+                            icon: "bolt.fill",
+                            color: .green,
+                            value: $state.protein,
+                            formatter: formatter,
+                            unit: "g"
+                        )
                     }
 
                     if state.combinedPresets.isNotEmpty {
                         let summary = state.waitersNotepad()
                         if summary.isNotEmpty {
-                            HStack {
-                                Text("Total")
-                                HStack(spacing: 0) {
-                                    ForEach(summary, id: \.self) {
-                                        Text($0).foregroundStyle(Color.randomGreen()).font(.footnote)
-                                        Text($0 == summary[summary.count - 1] ? "" : ", ")
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Total Summary")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .textCase(.uppercase)
+
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(summary, id: \.self) { item in
+                                            Text(item)
+                                                .font(.footnote.weight(.semibold))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(Color.green.opacity(0.15))
+                                                .foregroundColor(.green)
+                                                .clipShape(Capsule())
+                                        }
                                     }
-                                }.frame(maxWidth: .infinity, alignment: .trailing)
+                                }
                             }
+                            .padding(.vertical, 4)
                         }
                     }
 
                     HStack {
+                        Image(systemName: "clock.fill")
+                            .foregroundColor(.gray)
+                            .font(.title3)
+                            .frame(width: 30)
+
                         Text("Time")
+                            .fontWeight(.medium)
+
                         Spacer()
+
                         if !pushed {
                             Button {
-                                pushed = true
-                            } label: { Text("Now") }.buttonStyle(.borderless).foregroundColor(.secondary).padding(.trailing, 5)
-                        } else {
-                            Button { state.date = state.date.addingTimeInterval(-15.minutes.timeInterval) }
-                            label: { Image(systemName: "minus.circle") }.tint(.blue).buttonStyle(.borderless)
-                            DatePicker(
-                                "Time",
-                                selection: $state.date,
-                                displayedComponents: [.hourAndMinute]
-                            ).controlSize(.mini).labelsHidden()
-                            Button {
-                                state.date = state.date.addingTimeInterval(15.minutes.timeInterval)
+                                withAnimation(.spring()) { pushed = true }
+                            } label: {
+                                Text("Now")
+                                    .fontWeight(.bold)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.secondary.opacity(0.15))
+                                    .clipShape(Capsule())
                             }
-                            label: { Image(systemName: "plus.circle") }.tint(.blue).buttonStyle(.borderless)
+                            .buttonStyle(.borderless)
+                            .foregroundColor(.primary)
+                        } else {
+                            HStack(spacing: 12) {
+                                Button { state.date = state.date.addingTimeInterval(-15.minutes.timeInterval) }
+                                label: { Image(systemName: "minus") }
+                                    .buttonStyle(.bordered)
+                                    .buttonBorderShape(.circle)
+                                    .tint(.blue)
+
+                                DatePicker(
+                                    "Time",
+                                    selection: $state.date,
+                                    displayedComponents: [.hourAndMinute]
+                                )
+                                .controlSize(.mini)
+                                .labelsHidden()
+
+                                Button {
+                                    state.date = state.date.addingTimeInterval(15.minutes.timeInterval)
+                                }
+                                label: { Image(systemName: "plus") }
+                                    .buttonStyle(.bordered)
+                                    .buttonBorderShape(.circle)
+                                    .tint(.blue)
+                            }
                         }
                     }
+                    .padding(.vertical, 4)
                 }
 
                 if state.carbs > 0, let profile = state.id, profile != "None", state.carbsRequired != nil {
@@ -148,35 +217,113 @@ extension AddCarbs {
                         Button {
                             state.hypoTreatment = true
                             button.toggle()
-                            if button { state.add(override, fetch: editMode) }
-                        } label: { Text("Hypo Treatment") }
+                            if button { state.add(override, fetch: editMode, customDuration: nil) }
+                        } label: {
+                            HStack {
+                                Image(systemName: "cross.case.fill")
+                                Text("Hypo Treatment")
+                            }
+                            .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .center)
-                    }.listRowBackground(Color(.orange).opacity(0.9)).tint(.white)
+                            .padding(.vertical, 8)
+                        }
+                    }
+                    .listRowBackground(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.orange, Color.red.opacity(0.8)]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .tint(.white)
                 }
+
+                // 🟢 NEU: KI Typ, iAPS Berechnung & Dauer (anpassbar)
+                Section(header: Text("Verstoffwechselung & KI").textCase(.uppercase)) {
+                    let rule = state.evaluateMeal()
+                    let standardDuration = state.getIAPSStandardDuration()
+
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(.purple)
+                            .font(.title3)
+                            .frame(width: 30)
+
+                        Text("Typ")
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+
+                        Spacer()
+
+                        Text(rule?.category ?? "Standard")
+                            .font(.subheadline.weight(.bold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(rule != nil ? Color.purple.opacity(0.15) : Color.secondary.opacity(0.15))
+                            .foregroundColor(rule != nil ? .purple : .secondary)
+                            .clipShape(Capsule())
+                    }
+                    .padding(.vertical, 4)
+
+                    // Zeigt den iAPS Standardwert als Referenz an (nur wenn FPU im Spiel ist)
+                    if standardDuration > 0 {
+                        HStack {
+                            Image(systemName: "chart.bar.doc.horizontal")
+                                .foregroundColor(.blue)
+                                .font(.title3)
+                                .frame(width: 30)
+
+                            Text("iAPS Standard")
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+
+                            Spacer()
+
+                            Text("\(String(format: "%.1f", standardDuration)) h")
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    // Die manuelle / überschreibbare Zeit
+                    MacroInputRow(
+                        title: "Dauer (anpassbar)",
+                        icon: "timer",
+                        color: .orange,
+                        value: $state.customDuration,
+                        formatter: formatter,
+                        unit: "h"
+                    )
+                }
+                .onChange(of: state.carbs) { _ in updateDuration() }
+                .onChange(of: state.fat) { _ in updateDuration() }
+                .onChange(of: state.protein) { _ in updateDuration() }
+                .onAppear { updateDuration() }
 
                 Section {
                     Button {
-                        // 🟢 NEU: KI-Check vor dem Speichern der Mahlzeit!
-                        if let rule = state.evaluateMeal() {
-                            self.activeRule = rule
-                            self.showMealAlert = true
-                        } else {
-                            // Keine KI-Warnung, ganz normal weiter
-                            proceedWithSave()
-                        }
+                        proceedWithSave(
+                            customDuration: state
+                                .customDuration > 0 ? Double(truncating: state.customDuration as NSNumber) : nil
+                        )
                     } label: {
-                        Text(((state.skipBolus && !override && !editMode) || state.carbs <= 0) ? "Save" : "Continue")
+                        Text(((state.skipBolus && !override && !editMode) || state.carbs <= 0) ? "Save Meal" : "Continue")
+                            .font(.title3.weight(.semibold))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 8)
                     }
                     .disabled(empty)
-                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .listRowBackground(!empty ? Color(.systemBlue) : Color(.systemGray4))
-                .tint(.white)
+                .listRowBackground(
+                    empty ? Color(.systemGray5) : Color(.systemBlue)
+                )
+                .tint(empty ? .secondary : .white)
             }
             .compactSectionSpacing()
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .navigationTitle("Add Meal")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .navigationBarItems(trailing: Button("Cancel", action: {
                 state.hideModal()
                 if editMode { state.apsManager.determineBasalSync() }
@@ -189,27 +336,20 @@ extension AddCarbs {
                 )
             }
             .alert(isPresented: $saveAlert) { alert(food: selectedFoodItem) }
-            // 🟢 NEU: Der Alert, der aufpoppt, wenn die KI ein Muster bei der Mahlzeit erkennt
-            .alert(isPresented: $showMealAlert) {
-                Alert(
-                    title: Text("KI-Muster: \(activeRule?.category ?? "")"),
-                    message: Text(
-                        "iAPS unterschätzt diese Mahlzeit historisch um \(activeRule?.iapsUnderprediction ?? 0) mg/dL.\n\nDie KI empfiehlt ein Override von \(activeRule?.overridePct ?? 100)% für \(String(format: "%.1f", activeRule?.durationHours ?? 2.0)) Stunden."
-                    ),
-                    primaryButton: .default(Text("Ignorieren & Speichern")) {
-                        proceedWithSave()
-                    },
-                    secondaryButton: .default(Text("Verstanden & Speichern")) {
-                        proceedWithSave()
-                    }
-                )
+        }
+
+        // 🟢 Aktualisiert die Dauer automatisch, wenn Makros geändert werden. KI gewinnt, ansonsten iAPS Standard.
+        private func updateDuration() {
+            if let rule = state.evaluateMeal() {
+                state.customDuration = Decimal(rule.durationHours)
+            } else {
+                state.customDuration = Decimal(state.getIAPSStandardDuration())
             }
         }
 
-        // 🟢 NEU: Hilfsfunktion für den eigentlichen Speichervorgang
-        private func proceedWithSave() {
+        private func proceedWithSave(customDuration: Double? = nil) {
             button.toggle()
-            if button { state.add(override, fetch: editMode) }
+            if button { state.add(override, fetch: editMode, customDuration: customDuration) }
         }
 
         private var meal: Bool {
@@ -271,18 +411,27 @@ extension AddCarbs {
             Section {
                 Button { showingFoodSearch = true } label: {
                     HStack {
-                        Image(systemName: "network")
+                        Image(systemName: "magnifyingglass.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.multicolor)
                         Text("Search Food Database")
+                            .fontWeight(.medium)
                         Spacer()
-                        Image(systemName: "chevron.right").foregroundColor(.popUpGray).font(.system(size: 14, weight: .semibold))
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.popUpGray)
+                            .font(.system(size: 14, weight: .bold))
                     }.foregroundColor(.blue)
                 }.buttonStyle(PlainButtonStyle())
             } header: {
                 HStack {
                     Text("AI Food Search")
+                        .textCase(.uppercase)
                     Spacer()
-                    NavigationLink(destination: AISettingsView()) { Image(systemName: "gearshape") }
-                        .buttonStyle(PlainButtonStyle()).foregroundColor(.blue)
+                    NavigationLink(destination: AISettingsView()) {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
@@ -328,10 +477,6 @@ extension AddCarbs {
             }
         }
 
-        private func isAIAnalysisProduct(_ food: AIFoodItem) -> Bool {
-            food.brand == "AI Analysis" || food.brand == nil || food.brand?.contains("AI") == true
-        }
-
         private func handleSelectedFood(_ foodItem: FoodItem) {
             let calculatedCalories = Double(truncating: foodItem.carbs as NSNumber) * 4 +
                 Double(truncating: foodItem.protein as NSNumber) * 4 + Double(truncating: foodItem.fat as NSNumber) * 9
@@ -352,37 +497,74 @@ extension AddCarbs {
         private var empty: Bool { state.carbs <= 0 && state.fat <= 0 && state.protein <= 0 }
 
         private var mealPresets: some View {
-            Section {
-                HStack {
-                    if state.selection == nil {
-                        Button { presentPresets.toggle() } label: {
-                            HStack { Text(state.selection?.dish ?? NSLocalizedString("Saved Food", comment: ""))
-                                Text(">") }
-                        }.foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
-                    } else {
-                        minusButton
-                        Spacer()
-                        Button { presentPresets.toggle() } label: {
-                            HStack { Text(state.selection?.dish ?? NSLocalizedString("Saved Food", comment: ""))
-                                Text(">") }
-                        }.foregroundStyle(.secondary)
-                        Spacer()
-                        plusButton
+            HStack {
+                if state.selection == nil {
+                    Button { presentPresets.toggle() } label: {
+                        HStack {
+                            Text(state.selection?.dish ?? NSLocalizedString("Saved Food", comment: ""))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .bold))
+                        }
                     }
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                } else {
+                    minusButton
+                    Spacer()
+                    Button { presentPresets.toggle() } label: {
+                        HStack {
+                            Text(state.selection?.dish ?? NSLocalizedString("Saved Food", comment: ""))
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.secondary.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                    Spacer()
+                    plusButton
                 }
-            }.dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
 
         private var minusButton: some View {
-            Button { state.subtract()
-                if empty { state.selection = nil
-                    state.combinedPresets = [] } } label: { Image(systemName: "minus.circle.fill") }
-                .buttonStyle(.borderless).disabled(state.selection == nil)
+            Button {
+                withAnimation {
+                    state.subtract()
+                    if empty { state.selection = nil
+                        state.combinedPresets = [] }
+                }
+            } label: {
+                Image(systemName: "minus")
+                    .font(.title3.weight(.bold))
+                    .frame(width: 32, height: 32)
+                    .background(Color.secondary.opacity(0.2))
+                    .foregroundColor(.primary)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.borderless)
+            .disabled(state.selection == nil)
         }
 
         private var plusButton: some View {
-            Button { state.plus() } label: { Image(systemName: "plus.circle.fill") }.buttonStyle(.borderless)
-                .disabled(state.selection == nil)
+            Button {
+                withAnimation { state.plus() }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title3.weight(.bold))
+                    .frame(width: 32, height: 32)
+                    .background(Color.blue.opacity(0.15))
+                    .foregroundColor(.blue)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.borderless)
+            .disabled(state.selection == nil)
         }
 
         private var presetView: some View {
@@ -393,20 +575,35 @@ extension AddCarbs {
                         Button { addfromCarbsView() } label: {
                             HStack {
                                 Text("Save as Preset")
+                                    .fontWeight(.semibold)
                                 Spacer()
                                 Text(
-                                    "[Carbs: " + (formatter.string(from: state.carbs as NSNumber) ?? "") + ", Fat: " +
-                                        (formatter.string(from: state.fat as NSNumber) ?? "") + ", Protein: " +
-                                        (formatter.string(from: state.protein as NSNumber) ?? "") + "]"
+                                    "[ C: " + (formatter.string(from: state.carbs as NSNumber) ?? "") + " | F: " +
+                                        (formatter.string(from: state.fat as NSNumber) ?? "") + " | P: " +
+                                        (formatter.string(from: state.protein as NSNumber) ?? "") + " ]"
                                 )
+                                .font(.caption)
+                                .opacity(0.9)
                             }
-                        }.frame(maxWidth: .infinity, alignment: .center).listRowBackground(Color(.systemBlue)).tint(.white)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .listRowBackground(Color(.systemBlue))
+                        .tint(.white)
                     } header: { Text("Save") }
                 }
 
                 let filtered = carbPresets.filter { !($0.dish ?? "").isEmpty && ($0.dish ?? "Empty") != "Empty" }
                     .removeDublicates()
-                if filtered.count > 4 { Section { TextField("Search", text: $string) } header: { Text("Search") } }
+
+                if filtered.count > 4 {
+                    Section {
+                        HStack {
+                            Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                            TextField("Search", text: $string)
+                        }
+                    } header: { Text("Search") }
+                }
+
                 let data = string.isEmpty ? filtered : carbPresets
                     .filter { ($0.dish ?? "").localizedCaseInsensitiveContains(string) }
 
@@ -419,8 +616,13 @@ extension AddCarbs {
                             state.presetToEdit = Presets(context: moc)
                             newPreset = (NSLocalizedString("New", comment: ""), 0, 0, 0)
                             state.edit = true
-                        } label: { Image(systemName: "plus").font(.system(size: 22)) }
-                            .buttonStyle(.borderless).frame(maxWidth: .infinity, alignment: .trailing)
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 22))
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        .buttonStyle(.borderless)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
             }
@@ -429,20 +631,27 @@ extension AddCarbs {
         }
 
         private var back: some View {
-            Button { reset() } label: { Image(systemName: "chevron.backward").font(.system(size: 22)).padding(5) }
-                .foregroundStyle(.primary).buttonBorderShape(.circle).buttonStyle(.borderedProminent)
-                .tint(colorScheme == .light ? Color.white.opacity(0.5) : Color(.systemGray5)).offset(x: -10)
+            Button { reset() } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 18, weight: .bold))
+                    .padding(8)
+            }
+            .foregroundStyle(.primary)
+            .background(Color(.systemGray5))
+            .clipShape(Circle())
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.top, 10)
         }
 
         private func alert(food: AIFoodItem?) -> Alert {
             if let food = food {
                 return Alert(
                     title: Text(
-                        NSLocalizedString("Save", comment: "") + "\"" + food
-                            .name + "\"" + NSLocalizedString("as new Meal Preset?", comment: "")
+                        NSLocalizedString("Save", comment: "") + " \"" + food
+                            .name + "\" " + NSLocalizedString("as new Meal Preset?", comment: "")
                     ),
                     message: Text("To avoid having to search for same food on web again."),
-                    primaryButton: .destructive(Text("Yes"), action: { addToPresetsIfNew(food: food) }),
+                    primaryButton: .default(Text("Yes").bold(), action: { addToPresetsIfNew(food: food) }),
                     secondaryButton: .cancel(Text("No"), action: { cache(food: food) })
                 )
             }
@@ -461,29 +670,35 @@ extension AddCarbs {
             let dish = preset.dish ?? ""
             if !preset.hasChanges {
                 HStack {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(dish)
-                        HStack {
-                            Text("Carbs")
-                            Text("\(preset.carbs ?? 0)")
-                            Spacer()
-                            Text("Fat")
-                            Text("\(preset.fat ?? 0)")
-                            Spacer()
-                            Text("Protein")
-                            Text("\(preset.protein ?? 0)")
-                        }.foregroundStyle(.secondary).font(.caption).padding(.top, 2)
+                            .font(.headline)
+                        HStack(spacing: 12) {
+                            Label("\(preset.carbs ?? 0)g", systemImage: "leaf.fill").foregroundColor(.primary)
+                            Label("\(preset.fat ?? 0)g", systemImage: "drop.fill").foregroundColor(.blue)
+                            Label("\(preset.protein ?? 0)g", systemImage: "bolt.fill").foregroundColor(.green)
+                        }
+                        .font(.caption2.weight(.bold))
+                        .opacity(0.8)
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture { state.selection = preset
-                        state.addU(state.selection)
-                        reset() }
+                    .onTapGesture {
+                        withAnimation {
+                            state.selection = preset
+                            state.addU(state.selection)
+                            reset()
+                        }
+                    }
                     .swipeActions(edge: .leading) {
-                        Button { state.edit = true
+                        Button {
+                            state.edit = true
                             state.presetToEdit = preset
-                            update() } label: { Label("Edit", systemImage: "pencil.line") }
+                            update()
+                        } label: { Label("Edit", systemImage: "pencil") }
+                            .tint(.orange)
                     }
                 }
+                .padding(.vertical, 4)
             }
         }
 
@@ -544,34 +759,70 @@ extension AddCarbs {
         private var editView: some View {
             Form {
                 Section {
-                    HStack { TextField("", text: $newPreset.dish) }
-                    MacroInputRow(title: "Carbs", color: .secondary, value: $newPreset.carbs, formatter: formatter)
-                    MacroInputRow(title: "Fat", color: .secondary, value: $newPreset.fat, formatter: formatter)
-                    MacroInputRow(title: "Protein", color: .secondary, value: $newPreset.protein, formatter: formatter)
-                } header: { Text("Saved Food") }
+                    HStack { TextField("Dish Name", text: $newPreset.dish).font(.headline) }
+                    MacroInputRow(
+                        title: "Carbs",
+                        icon: "leaf.fill",
+                        color: .primary,
+                        value: $newPreset.carbs,
+                        formatter: formatter,
+                        unit: "g"
+                    )
+                    MacroInputRow(
+                        title: "Fat",
+                        icon: "drop.fill",
+                        color: .blue,
+                        value: $newPreset.fat,
+                        formatter: formatter,
+                        unit: "g"
+                    )
+                    MacroInputRow(
+                        title: "Protein",
+                        icon: "bolt.fill",
+                        color: .green,
+                        value: $newPreset.protein,
+                        formatter: formatter,
+                        unit: "g"
+                    )
+                } header: { Text("Edit Saved Food") }
 
                 Section {
-                    Button { save() } label: { Text("Save") }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .listRowBackground(!disabled ? Color(.systemBlue) : Color(.systemGray4))
-                        .tint(.white).disabled(disabled)
+                    Button { save() } label: {
+                        Text("Save Preset")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 8)
+                    }
+                    .listRowBackground(!disabled ? Color(.systemBlue) : Color(.systemGray4))
+                    .tint(.white).disabled(disabled)
                 }
             }.environment(\.colorScheme, colorScheme)
         }
     }
 }
 
-// 🚀 OPTIMIERUNG: Ausgelagerte Macro Input Row
+// Anpassbare Makro-Reihe mit Einheit (damit wir auch "h" für Stunden nutzen können)
 struct MacroInputRow: View {
     let title: String
+    let icon: String
     let color: Color
     @Binding var value: Decimal
     let formatter: NumberFormatter
+    var unit: String = "g"
 
     var body: some View {
         HStack {
-            Text(title).foregroundColor(color)
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .font(.title3)
+                .frame(width: 30)
+
+            Text(title)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+
             Spacer()
+
             DecimalTextField(
                 "0",
                 value: $value,
@@ -579,8 +830,14 @@ struct MacroInputRow: View {
                 autofocus: false,
                 liveEditing: true
             )
-            Text("grams").foregroundColor(.secondary)
+            .font(.title3.weight(.bold))
+            .foregroundColor(color)
+
+            Text(unit)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
         }
+        .padding(.vertical, 4)
     }
 }
 

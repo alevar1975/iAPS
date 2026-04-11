@@ -296,7 +296,8 @@ extension Bolus {
                     note: recent.note,
                     enteredBy: CarbsEntry.manual,
                     isFPU: false,
-                    kcal: nil
+                    kcal: nil,
+                    duration: nil // 🟢 FIX: Dauer hinzugefügt
                 )]
             }
 
@@ -465,7 +466,8 @@ extension Bolus {
                     note: recent.note,
                     enteredBy: CarbsEntry.manual,
                     isFPU: false,
-                    kcal: nil
+                    kcal: nil,
+                    duration: nil // 🟢 FIX: Dauer hinzugefügt
                 )]
 
                 if let passForward = carbToStore.first {

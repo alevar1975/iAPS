@@ -8,6 +8,7 @@ protocol CarbsObserver {
 }
 
 protocol CarbsStorage {
+    func storeCarbs(_ carbs: [CarbsEntry], customDuration: Double?)
     func storeCarbs(_ carbs: [CarbsEntry])
     func syncDate() -> Date
     func recent() -> [CarbsEntry]
@@ -30,6 +31,10 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
     }
 
     func storeCarbs(_ entries: [CarbsEntry]) {
+        storeCarbs(entries, customDuration: nil)
+    }
+
+    func storeCarbs(_ entries: [CarbsEntry], customDuration: Double?) {
         processQueue.sync {
             let file = OpenAPS.Monitor.carbHistory
             var uniqEvents: [CarbsEntry] = []
@@ -52,16 +57,22 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                     let carbEquivalents = (kcal / 10) * adjustment
                     let fpus = carbEquivalents / 10
 
-                    var computedDuration = 0
-                    switch fpus {
-                    case ..<2:
-                        computedDuration = 3
-                    case 2 ..< 3:
-                        computedDuration = 4
-                    case 3 ..< 4:
-                        computedDuration = 5
-                    default:
-                        computedDuration = timeCap
+                    var computedDuration: Double = 0
+                    if let custom = customDuration, custom > 0 {
+                        computedDuration = custom
+                        debug(.default, "Nutze KI/Custom FPU-Dauer: \(computedDuration) Stunden")
+                    } else {
+                        switch fpus {
+                        case ..<2:
+                            computedDuration = 3
+                        case 2 ..< 3:
+                            computedDuration = 4
+                        case 3 ..< 4:
+                            computedDuration = 5
+                        default:
+                            computedDuration = Double(timeCap)
+                        }
+                        debug(.default, "Nutze Warschauer FPU-Dauer: \(computedDuration) Stunden")
                     }
 
                     var equivalent: Decimal = carbEquivalents / Decimal(computedDuration)
@@ -83,7 +94,8 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                         let eachCarbEntry = CarbsEntry(
                             id: UUID().uuidString, createdAt: creationDate, actualDate: useDate,
                             carbs: equivalent, fat: 0, protein: 0, note: nil,
-                            enteredBy: CarbsEntry.manual, isFPU: true, kcal: nil
+                            enteredBy: CarbsEntry.manual, isFPU: true, kcal: nil,
+                            duration: customDuration // 🟢 FIX: Dauer übergeben
                         )
                         futureCarbArray.append(eachCarbEntry)
                         numberOfEquivalents -= 1
@@ -106,7 +118,8 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
                         note: entry.note ?? "",
                         enteredBy: entry.enteredBy ?? "",
                         isFPU: false,
-                        kcal: nil
+                        kcal: nil,
+                        duration: customDuration // 🟢 FIX: Dauer übergeben
                     )
 
                     if entries.filter({ $0.carbs > 0 }).count > 1 {
@@ -201,7 +214,6 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
         return Array(Set(treatments).subtracting(Set(uploaded)))
     }
 
-    // 🟢 NEU: Holt ALLE Mahlzeiten für den Force Upload
     func allNightscoutTreatments() -> [NigtscoutTreatment] {
         let eventsManual = recent()
             .filter {
@@ -233,7 +245,6 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
         }
     }
 
-    // 🟢 NEU: Ermittelt die Statistik für die UI
     func getMacroStats() -> (count: Int, oldestDate: Date?) {
         let allValues = storage.retrieve(OpenAPS.Monitor.carbHistory, as: [CarbsEntry].self) ?? []
         let count = allValues.count
@@ -241,7 +252,6 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
         return (count, oldest)
     }
 
-    // 🟢 NEU: Löscht alle Daten, die älter als X Tage sind
     func deleteOldRecords(olderThanDays: Int) {
         let cutoff = Calendar.current.date(byAdding: .day, value: -olderThanDays, to: Date()) ?? Date()
 

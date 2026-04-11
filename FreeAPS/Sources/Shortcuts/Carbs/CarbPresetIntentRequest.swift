@@ -20,7 +20,8 @@ final class CarbPresetIntentRequest: BaseIntentsRequest {
                 note: "add with shortcuts",
                 enteredBy: CarbsEntry.shortcut,
                 isFPU: (quantityFat > 0 || quantityProtein > 0) ? true : false,
-                kcal: nil
+                kcal: nil,
+                duration: nil // 🟢 FIX: Dauer hinzugefügt
             )]
         )
         var resultDisplay: String

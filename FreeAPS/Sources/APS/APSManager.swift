@@ -700,7 +700,8 @@ final class BaseAPSManager: APSManager, Injectable {
                 note: "Remote",
                 enteredBy: "Nightscout operator",
                 isFPU: false,
-                kcal: nil
+                kcal: nil,
+                duration: nil // 🟢 FIX: Dauer für Mahlzeiten-Befehle (Nightscout)
             )])
 
             announcementsStorage.storeAnnouncements([announcement], enacted: true)
@@ -1389,10 +1390,22 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     private func clearBolusReporter() {
+        // 🟢 NEU: Merken, ob tatsächlich gerade ein Bolus überwacht wurde
+        let wasBolusing = bolusReporter != nil
+
         bolusReporter?.removeObserver(self)
         bolusReporter = nil
-        processQueue.asyncAfter(deadline: .now() + 0.5) {
+
+        // 🟢 FIX: Wir erhöhen die Wartezeit leicht auf 2.0 Sekunden,
+        // damit der Pumpenstatus im System auch wirklich sicher auf "nicht mehr bolusing" steht.
+        processQueue.asyncAfter(deadline: .now() + 2.0) {
             self.bolusProgress.send(nil)
+
+            // 🟢 NEU: Wenn ein Bolus lief und jetzt fertig ist, triggern wir sofort den Loop!
+            if wasBolusing {
+                debug(.apsManager, "Manueller Bolus beendet. Erzwungener Loop-Durchlauf startet.")
+                self.loop()
+            }
         }
     }
 }

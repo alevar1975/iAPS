@@ -2,7 +2,7 @@ import CoreData
 import Foundation
 import SwiftUI
 
-// 🟢 NEU: Lightweight Structs nur für die Mahlzeiten-Regeln der KI
+// Lightweight Structs nur für die Mahlzeiten-Regeln der KI
 struct IAPSMealRule: Codable, Equatable {
     let category: String
     let overridePct: Int
@@ -56,9 +56,10 @@ extension AddCarbs {
         @Published var skipSave = false
 
         @Published var combinedPresets: [(preset: Presets?, portions: Double)] = []
-
-        // 🟢 NEU: Speichert die KI-Regeln
         @Published var mealRules: [IAPSMealRule] = []
+
+        // Variable für deine manuelle oder automatische Dauer-Eingabe
+        @Published var customDuration: Decimal = 0
 
         let now = Date.now
 
@@ -74,11 +75,9 @@ extension AddCarbs {
             ai = settingsManager.settings.ai
             skipSave = settingsManager.settings.skipSave
 
-            // 🟢 NEU: Lade die Regeln stumm im Hintergrund von deinem Server
             fetchMealRules()
         }
 
-        // 🟢 NEU: Ladefunktion
         func fetchMealRules() {
             guard let url = URL(string: "https://alentestetkidiab.de/weekly_actions_latest.json") else { return }
             URLSession.shared.dataTask(with: url) { data, _, _ in
@@ -91,7 +90,6 @@ extension AddCarbs {
             }.resume()
         }
 
-        // 🟢 NEU: Auswertungsfunktion für die Eingabemaske
         func evaluateMeal() -> IAPSMealRule? {
             let c = NSDecimalNumber(decimal: carbs).doubleValue
             let f = NSDecimalNumber(decimal: fat).doubleValue
@@ -108,7 +106,26 @@ extension AddCarbs {
             return mealRules.first(where: { $0.category == detectedCategory })
         }
 
-        func add(_ continue_: Bool, fetch: Bool) {
+        // 🟢 FIX: Alles durchgehend als 'Decimal' rechnen, um Typ-Konflikte mit 'adjustment' zu vermeiden
+        func getIAPSStandardDuration() -> Double {
+            if fat == 0, protein == 0 { return 0 } // Normale Kohlenhydrate ohne FPU-Streckung
+
+            let adjustment = settings.settings.individualAdjustmentFactor
+            let timeCap = settings.settings.timeCap
+
+            let kcal = protein * 4 + fat * 9
+            let carbEquivalents = (kcal / 10) * adjustment
+            let fpus = carbEquivalents / 10
+
+            switch fpus {
+            case ..<2: return 3
+            case 2 ..< 3: return 4
+            case 3 ..< 4: return 5
+            default: return Double(timeCap)
+            }
+        }
+
+        func add(_ continue_: Bool, fetch: Bool, customDuration: Double? = nil) {
             guard carbs > 0 || fat > 0 || protein > 0 else {
                 showModal(for: nil)
                 return
@@ -126,20 +143,21 @@ extension AddCarbs {
                 note: note,
                 enteredBy: CarbsEntry.manual,
                 isFPU: false,
-                kcal: nil
+                kcal: nil,
+                duration: customDuration
             )]
 
             if hypoTreatment { hypo() }
 
             if (skipBolus && !continue_ && !fetch) || hypoTreatment {
-                carbsStorage.storeCarbs(carbsToStore)
+                carbsStorage.storeCarbs(carbsToStore, customDuration: customDuration)
                 apsManager.determineBasalSync()
                 showModal(for: nil)
             } else if carbs > 0 {
                 saveToCoreData(carbsToStore)
                 showModal(for: .bolus(waitForSuggestion: true, fetch: true))
             } else if !empty {
-                carbsStorage.storeCarbs(carbsToStore)
+                carbsStorage.storeCarbs(carbsToStore, customDuration: customDuration)
                 apsManager.determineBasalSync()
                 showModal(for: nil)
             } else {

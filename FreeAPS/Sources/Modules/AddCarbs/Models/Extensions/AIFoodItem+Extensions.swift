@@ -21,7 +21,8 @@ extension AIFoodItem {
             note: "\(name)\(brand != nil ? " (\(brand!))" : "") - AI detected",
             enteredBy: CarbsEntry.manual,
             isFPU: false,
-            kcal: nil
+            kcal: nil,
+            duration: nil // 🟢 FIX: Dauer hinzugefügt
         )
     }
 }

@@ -11,6 +11,7 @@ struct CarbsEntry: JSON, Equatable, Hashable {
     let enteredBy: String?
     let isFPU: Bool?
     let kcal: Decimal?
+    let duration: Double? // 🟢 NEU: Speichert die KI-Dauer oder die manuell gestreckte Zeit
 
     static let manual = "iAPS"
     static let watch = "iAPS Watch"
@@ -39,6 +40,7 @@ extension CarbsEntry {
         case enteredBy
         case isFPU
         case kcal
+        case duration // 🟢 NEU: Schlüssel für das JSON-Encoding/Decoding
     }
 
     var kcalValue: Decimal {
