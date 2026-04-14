@@ -64,19 +64,19 @@ extension PumpConfig {
 
                         if pumpManager.pluginIdentifier == "Dana" {
                             Section(
-                                header: Text("Site & Reservoir"),
+                                header: Text("Site, Reservoir & Battery"),
                                 footer: Text(
-                                    "The old entry will be automatically deleted before the new date is securely synchronized with Nightscout."
+                                    "Der alte Eintrag wird automatisch gelöscht, bevor das neue Datum sicher mit Nightscout synchronisiert wird."
                                 )
                             ) {
                                 DatePicker(
-                                    "Changed At",
+                                    "Geändert am",
                                     selection: $state.changedAt,
                                     displayedComponents: [.date, .hourAndMinute]
                                 )
                                 .padding(.vertical, 4)
 
-                                // SEXY SMOOTH BUTTON 1: Site Change
+                                // Site Change Button
                                 Button(action: {
                                     state.confirmation = .siteChange
                                 }) {
@@ -93,7 +93,7 @@ extension PumpConfig {
                                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
                                 .listRowBackground(Color.clear)
 
-                                // SEXY SMOOTH BUTTON 2: Reservoir Change
+                                // Reservoir Change Button
                                 Button(action: {
                                     state.confirmation = .reservoirChange
                                 }) {
@@ -107,6 +107,23 @@ extension PumpConfig {
                                     }
                                 }
                                 .buttonStyle(SmoothiOSButtonStyle(backgroundColor: .orange))
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                                .listRowBackground(Color.clear)
+
+                                // Battery Change Button
+                                Button(action: {
+                                    state.confirmation = .batteryChange
+                                }) {
+                                    HStack {
+                                        Image(systemName: "battery.100")
+                                            .font(.title3)
+                                        Text("Log Battery Change")
+                                            .fontWeight(.semibold)
+                                            .font(.body)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(SmoothiOSButtonStyle(backgroundColor: .green))
                                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
                                 .listRowBackground(Color.clear)
                             }
@@ -151,19 +168,28 @@ extension PumpConfig {
                         return Alert(
                             title: Text("Log Site Change?"),
                             message: Text(
-                                "Do you want to set the Site Change to\n\(state.formattedChangedAt)?\n\nThe old entry will be automatically deleted from Nightscout."
+                                "Möchtest du den Katheterwechsel auf\n\(state.formattedChangedAt) setzen?\n\nDer alte Eintrag wird automatisch aus Nightscout gelöscht."
                             ),
-                            primaryButton: .default(Text("Save"), action: { state.logSiteChange() }),
-                            secondaryButton: .cancel(Text("Cancel"))
+                            primaryButton: .default(Text("Speichern"), action: { state.logSiteChange() }),
+                            secondaryButton: .cancel(Text("Abbrechen"))
                         )
                     case .reservoirChange:
                         return Alert(
                             title: Text("Log Reservoir Change?"),
                             message: Text(
-                                "Do you want to set the Reservoir Change to\n\(state.formattedChangedAt)?\n\nThe old entry will be automatically deleted from Nightscout."
+                                "Möchtest du den Reservoirwechsel auf\n\(state.formattedChangedAt) setzen?\n\nDer alte Eintrag wird automatisch aus Nightscout gelöscht."
                             ),
-                            primaryButton: .default(Text("Save"), action: { state.logReservoirChange() }),
-                            secondaryButton: .cancel(Text("Cancel"))
+                            primaryButton: .default(Text("Speichern"), action: { state.logReservoirChange() }),
+                            secondaryButton: .cancel(Text("Abbrechen"))
+                        )
+                    case .batteryChange:
+                        return Alert(
+                            title: Text("Log Battery Change?"),
+                            message: Text(
+                                "Möchtest du den Batteriewechsel auf\n\(state.formattedChangedAt) setzen?\n\nDer alte Eintrag wird automatisch aus Nightscout gelöscht."
+                            ),
+                            primaryButton: .default(Text("Speichern"), action: { state.logBatteryChange() }),
+                            secondaryButton: .cancel(Text("Abbrechen"))
                         )
                     }
                 }

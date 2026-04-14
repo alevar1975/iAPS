@@ -10,6 +10,7 @@ extension PumpConfig {
     enum ActionConfirmation: Int, Identifiable {
         case siteChange
         case reservoirChange
+        case batteryChange
         var id: Int { rawValue }
     }
 
@@ -154,6 +155,51 @@ extension PumpConfig {
                         )
                     } else {
                         self.schedulePushNotification(title: "Upload Error", body: "Reservoir Change could not be synchronized.")
+                    }
+                }
+            }
+            changedAt = Date()
+        }
+
+        func logBatteryChange() {
+            let dateToSave = changedAt
+            let formattedDate = formattedChangedAt
+
+            // Execute everything on a background thread
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+
+                // 1. Save locally for iAPS in the background
+                self.storage.save(dateToSave, as: "monitor/battery.json")
+
+                let semaphore = DispatchSemaphore(value: 0)
+
+                // 2. Automatically delete the oldest entry
+                self.deleteLatestTreatment(eventType: "Pump Battery Change") { _, _ in
+                    semaphore.signal()
+                }
+                semaphore.wait()
+
+                // 3. Prevent Race Condition
+                Thread.sleep(forTimeInterval: 2.0)
+
+                // 4. Upload the new entry
+                var uploadSuccess = false
+                self.uploadRawTreatment(eventType: "Pump Battery Change", date: dateToSave) { success in
+                    uploadSuccess = success
+                    semaphore.signal()
+                }
+                semaphore.wait()
+
+                // 5. Fire acknowledged push notification
+                DispatchQueue.main.async {
+                    if uploadSuccess {
+                        self.schedulePushNotification(
+                            title: "Battery Changed",
+                            body: "Successfully updated to \(formattedDate)."
+                        )
+                    } else {
+                        self.schedulePushNotification(title: "Upload Error", body: "Battery Change could not be synchronized.")
                     }
                 }
             }
