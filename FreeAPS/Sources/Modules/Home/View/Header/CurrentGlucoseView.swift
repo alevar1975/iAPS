@@ -95,7 +95,7 @@ struct CurrentGlucoseView: View {
     var glucoseView: some View {
         ZStack {
             if let recent = recentGlucose {
-                // 🟢 Der integrierte Apple-Style Pod für Glukose und Trend
+                // 🟢 Der 100px Apple-Style Pod
                 VStack(spacing: 0) {
                     GlucoseValuePod(recentGlucose: recent, scrolling: scrolling)
 
@@ -106,9 +106,10 @@ struct CurrentGlucoseView: View {
                             minutesAgo <= 1 ? NSLocalizedString("Now", comment: "") :
                                 (text + " " + NSLocalizedString("min", comment: "Short form for minutes") + " ")
                         )
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
-                        .offset(x: 1, y: fontSize >= .extraLarge ? -1 : 4) // Optisch vom Kreis abgesetzt
+                        // 🟢 Minimal abgesetzt, damit es nicht in den Pod ragt
+                        .offset(y: 8)
                     }
                 }
 
@@ -116,8 +117,9 @@ struct CurrentGlucoseView: View {
                     sageView
                 }
 
-                if displayDelta, !scrolling, let deltaInt = delta,
-                   !(units == .mmolL && abs(deltaInt) <= 1) { deltaView(deltaInt) }
+                if displayDelta, !scrolling, let deltaInt = delta, !(units == .mmolL && abs(deltaInt) <= 1) {
+                    deltaView(deltaInt)
+                }
             }
         }
     }
@@ -126,17 +128,16 @@ struct CurrentGlucoseView: View {
         ZStack {
             let deltaConverted = units == .mmolL ? deltaInt.asMmolL : Decimal(deltaInt)
             let string = deltaFormatter.string(from: deltaConverted as NSNumber) ?? ""
-            let offset: CGFloat = -7
 
             Text(string)
-                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(.secondary)
                 .contentTransition(.numericText())
                 .animation(.spring(response: 0.6, dampingFraction: 0.8), value: string)
-                .offset(x: offset, y: 10)
+                // 🟢 Näher an den 100px Pod herangezogen
+                .offset(x: 75, y: -5)
         }
-        .dynamicTypeSize(DynamicTypeSize.medium ... DynamicTypeSize.large)
-        .frame(maxHeight: .infinity, alignment: .center).offset(x: 110.5, y: -9)
+        .frame(maxHeight: .infinity, alignment: .center)
     }
 
     private var sageView: some View {
@@ -152,7 +153,7 @@ struct CurrentGlucoseView: View {
                 let minutesAndHours = (displayExpiration && expiration < 1 * 8.64E4) || (displaySAGE && sensorAge < 1 * 8.64E4)
 
                 Sage(amount: sensorAge, expiration: expiration, lineColour: lineColour, sensordays: sensordays)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 28, height: 28)
                     .overlay {
                         HStack {
                             Text(
@@ -167,29 +168,28 @@ struct CurrentGlucoseView: View {
             }
         }
         .font(.footnote)
-        .dynamicTypeSize(DynamicTypeSize.medium ... DynamicTypeSize.large)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding(20)
-        .offset(x: -5)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(20)
     }
 
-    // 🟢 Basis-Winkel des Pfeils (Das Offset übernimmt jetzt AnimatedTrendRing)
+    // 🟢 Basis-Winkel des Pfeils aus dem iAPS Backend
     private var adjustments: (degree: Double, x: CGFloat, y: CGFloat) {
         guard let direction = recentGlucose?.direction else {
             return (90, 0, 0)
         }
         switch direction {
         case .doubleUp,
-             .singleUp,
              .tripleUp:
             return (0, 0, 0) // 12 Uhr
-        case .fortyFiveUp:
+        case .fortyFiveUp,
+             .singleUp:
             return (45, 0, 0) // 1:30 Uhr
         case .flat:
             return (90, 0, 0) // 3 Uhr
-        case .fortyFiveDown:
+        case .fortyFiveDown,
+             .singleDown:
             return (135, 0, 0) // 4:30 Uhr
         case .doubleDown,
-             .singleDown,
              .tripleDown:
             return (180, 0, 0) // 6 Uhr
         case .none,
@@ -199,88 +199,71 @@ struct CurrentGlucoseView: View {
         }
     }
 
-    // 🟢 NEU: Die komplette Glukose-Kapsel samt animiertem Ring
     private func GlucoseValuePod(recentGlucose: BloodGlucose, scrolling: Bool) -> some View {
         ZStack {
-            // 1. Hintergrund-Glas (Milchglas-Pod)
-            ZStack {
-                RoundedRectangle(cornerRadius: 100, style: .continuous)
-                    .fill(colorScheme == .dark ? Color(white: 0.05).opacity(0.85) : Color.white.opacity(0.7))
-                    .background(colorScheme == .dark ? Material.ultraThin : Material.thin)
+            // Glas-Hintergrund
+            RoundedRectangle(cornerRadius: 100, style: .continuous)
+                .fill(colorScheme == .dark ? Color(white: 0.05).opacity(0.85) : Color.white.opacity(0.7))
+                .background(colorScheme == .dark ? Material.ultraThin : Material.thin)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 100, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [.white.opacity(0.25), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: colorOfGlucose.opacity(0.3), radius: 6, x: 0, y: 3)
 
-                RoundedRectangle(cornerRadius: 100, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(colorScheme == .dark ? 0.25 : 0.8),
-                                .clear,
-                                .white.opacity(colorScheme == .dark ? 0.08 : 0.3)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-                    .blendMode(colorScheme == .dark ? .plusLighter : .normal)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 100, style: .continuous))
-            .shadow(color: colorOfGlucose.opacity(0.4), radius: 8, x: 0, y: 4)
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.5 : 0.1), radius: 25, x: 0, y: 12)
-
-            // 2. Zentrierter Glukosewert
+            // Zentrierter Glukosewert
             let formatter = recentGlucose.type == GlucoseType.manual.rawValue ? manualGlucoseFormatter : glucoseFormatter
-            if let string = recentGlucose.unfiltered.map({
-                formatter.string(from: Double(units == .mmolL ? $0.asMmolL : $0) as NSNumber) ?? ""
-            }) {
+            if let string = recentGlucose.unfiltered
+                .map({ formatter.string(from: Double(units == .mmolL ? $0.asMmolL : $0) as NSNumber) ?? "" })
+            {
                 glucoseText(string)
             }
 
-            // 3. Der performante Apple Watch Style Kometen-Ring
+            // 🟢 Getrennter Komet und stationärer Pfeil
             AnimatedTrendRing(
                 degree: adjustments.degree,
-                direction: recentGlucose.direction,
                 color: alwaysUseColors ? colorOfGlucose : (alarm == nil ? .primary : .loopRed),
                 scrolling: scrolling,
                 dateString: recentGlucose.dateString
             )
         }
-        .frame(width: !scrolling ? 140 : 80, height: !scrolling ? 140 : 80)
+        // 🟢 100px exakte Größe
+        .frame(width: !scrolling ? 100 : 65, height: !scrolling ? 100 : 65)
     }
 
     private func glucoseText(_ string: String) -> some View {
-        ZStack {
-            let decimal = string.components(separatedBy: decimalString)
-            let baseColor = alwaysUseColors ? colorOfGlucose : (alarm == nil ? .primary : .loopRed)
+        let decimal = string.components(separatedBy: decimalString)
+        let baseColor = alwaysUseColors ? colorOfGlucose : (alarm == nil ? .primary : .loopRed)
 
+        return Group {
             if decimal.count > 1 {
                 HStack(spacing: 0) {
                     Text(decimal[0])
-                        .font(.system(size: !scrolling ? 48 : 24, weight: .heavy, design: .rounded))
-                        .contentTransition(.numericText())
+                        // 🟢 Angepasst für 100px Pod
+                        .font(.system(size: !scrolling ? 34 : 18, weight: .heavy, design: .rounded))
                     Text(decimalString)
-                        .font(.system(size: !scrolling ? 24 : 12, weight: .heavy, design: .rounded))
-                        .baselineOffset(-10)
+                        .font(.system(size: !scrolling ? 18 : 10, weight: .heavy, design: .rounded))
+                        .baselineOffset(-6)
                     Text(decimal[1])
-                        .font(.system(size: !scrolling ? 30 : 16, weight: .heavy, design: .rounded))
-                        .baselineOffset(!scrolling ? -8 : -4)
-                        .contentTransition(.numericText())
+                        .font(.system(size: !scrolling ? 22 : 12, weight: .heavy, design: .rounded))
+                        .baselineOffset(-4)
                 }
-                .tracking(-1.5)
-                .offset(x: 0, y: 4) // Perfekt in der Kapsel zentriert
-                .foregroundColor(baseColor)
-                .shadow(color: baseColor.opacity(0.4), radius: 8, x: 0, y: 4)
-
             } else {
                 Text(string)
-                    .font(.system(size: !scrolling ? 54 : 28, weight: .heavy, design: .rounded))
-                    .tracking(-2)
-                    .foregroundColor(baseColor)
-                    .contentTransition(.numericText())
-                    .shadow(color: baseColor.opacity(0.4), radius: 8, x: 0, y: 4)
-                    .offset(x: 0, y: 4) // Perfekt in der Kapsel zentriert
+                    // 🟢 Angepasst für 100px Pod
+                    .font(.system(size: !scrolling ? 40 : 22, weight: .heavy, design: .rounded))
             }
         }
-        .offset(y: scrolling ? 3 : 0)
+        .foregroundColor(baseColor)
+        .shadow(color: baseColor.opacity(0.3), radius: 4, x: 0, y: 2)
+        .contentTransition(.numericText())
         .animation(.spring(response: 0.5, dampingFraction: 0.8), value: string)
     }
 
@@ -288,150 +271,139 @@ struct CurrentGlucoseView: View {
         let whichGlucose = recentGlucose?.glucose ?? 0
         guard lowGlucose < highGlucose else { return .primary }
 
-        switch whichGlucose {
-        case 0 ..< Int(lowGlucose):
-            return .loopRed
-        case Int(lowGlucose) ..< Int(highGlucose):
-            return .loopGreen
-        case Int(highGlucose)...:
-            return .loopYellow
-        default:
-            return .loopYellow
-        }
+        if whichGlucose < Int(lowGlucose) { return .loopRed }
+        if whichGlucose < Int(highGlucose) { return .loopGreen }
+        return .loopYellow
     }
 }
 
-// 🟢 NEU: Hochperformanter 15s Kometenschweif & Zentripetal-Pfeil (Main-Thread Save!)
+// 🟢 GETRENNTE ANIMATION: Unabhängiger Schweif & Atmernder Pfeil
 struct AnimatedTrendRing: View {
     let degree: Double
-    let direction: BloodGlucose.Direction?
     let color: Color
     let scrolling: Bool
     let dateString: Date?
 
-    // Animations-Zustände (Main-Thread entlastet durch .repeatCount)
-    @State private var spinDegree: Double = 0
-    @State private var flatOffset: CGFloat = 0
-
-    var isFlat: Bool {
-        direction == .flat || direction == .none || direction == .notComputable || direction == .rateOutOfRange
-    }
-
-    var isRising: Bool {
-        direction == .singleUp || direction == .doubleUp || direction == .tripleUp || direction == .fortyFiveUp
-    }
-
-    var isFalling: Bool {
-        direction == .singleDown || direction == .doubleDown || direction == .tripleDown || direction == .fortyFiveDown
-    }
+    @State private var breatheOffset: CGFloat = 0
+    @State private var tailRotation: Double = 0
+    @State private var sparkleOpacity: Double = 0.3
 
     var body: some View {
-        let size: CGFloat = !scrolling ? 140 : 80
+        let size: CGFloat = !scrolling ? 100 : 65
         let radius = size / 2
-        let arrowSize: CGFloat = !scrolling ? 20 : 14 // Prominenter für die Schweif-Spitze
+        let arrowSize: CGFloat = !scrolling ? 18 : 12
+        let angleFromThree = degree - 90 // Berechnet die Position auf dem Ziffernblatt
+
+        let isFlat = angleFromThree == 0
+        let isRising = angleFromThree < 0
+        let isFalling = angleFromThree > 0
 
         ZStack {
-            // 🟢 1. ULTIMATIVER KOMETENSCHWEIF (Raumfüllend, sprayig, glitzig, Farbabgestimmt)
-            if isRising || isFalling {
+            // 🟢 1. DER SCHWEIF / SPARKLE (Völlig losgelöst vom Pfeil)
+            if isFlat {
+                // Flat: Der gesamte Ring funkelt für 15 Sekunden
                 ZStack {
-                    // Hauptschweif-Körper
                     Circle()
-                        .trim(from: 0.0, to: 0.35) // Längerer Schweif (raumfüllender)
+                        .stroke(color.opacity(sparkleOpacity), lineWidth: !scrolling ? 4 : 2)
+                        .blur(radius: 2)
+
+                    Circle()
+                        .stroke(color.opacity(sparkleOpacity * 0.5), lineWidth: !scrolling ? 2 : 1)
+
+                    // Glitzer Partikel rund um den Ring
+                    ForEach(0 ..< 12, id: \.self) { i in
+                        Circle()
+                            .fill(color)
+                            .frame(width: CGFloat.random(in: 2 ... 4), height: CGFloat.random(in: 2 ... 4))
+                            .offset(y: -radius + CGFloat.random(in: -3 ... 3))
+                            .rotationEffect(.degrees(Double(i) * 30))
+                            .opacity(sparkleOpacity * Double.random(in: 0.4 ... 1.0))
+                            .shadow(color: color, radius: 2)
+                    }
+                }
+            } else {
+                // Steigend/Fallend: Rasanter Kometenschweif, der endlos kreist
+                ZStack {
+                    Circle()
+                        .trim(from: 0.0, to: 0.25) // Ein Viertel des Rings lang
                         .stroke(
                             AngularGradient(
-                                colors: [color.opacity(0.8), color.opacity(0)], // Verblasst sanft
+                                colors: [color.opacity(0.8), color.opacity(0)],
                                 center: .center,
                                 startAngle: .degrees(0),
-                                endAngle: .degrees(120)
+                                endAngle: .degrees(90)
                             ),
-                            style: StrokeStyle(lineWidth: !scrolling ? 8 : 5, lineCap: .round)
+                            style: StrokeStyle(lineWidth: !scrolling ? 6 : 4, lineCap: .round)
                         )
-                        .blur(radius: 4) // Spray-Effekt (weicher Körper)
+                        .blur(radius: 2)
 
-                    // Glitzer-Glow-Kern
                     Circle()
-                        .trim(from: 0.0, to: 0.35)
+                        .trim(from: 0.0, to: 0.25)
                         .stroke(
                             AngularGradient(
                                 colors: [color, color.opacity(0.1)],
                                 center: .center,
                                 startAngle: .degrees(0),
-                                endAngle: .degrees(120)
+                                endAngle: .degrees(90)
                             ),
-                            style: StrokeStyle(lineWidth: !scrolling ? 4 : 2, lineCap: .round)
+                            style: StrokeStyle(lineWidth: !scrolling ? 3 : 2, lineCap: .round)
                         )
-
-                    // Glitzer-Spots (für den "glitzigen, sprayigen" Look)
-                    ForEach(0 ..< 12) { i in
-                        Circle()
-                            .fill(color)
-                            .frame(width: CGFloat.random(in: 3 ... 6), height: CGFloat.random(in: 3 ... 6))
-                            .offset(y: -radius + CGFloat.random(in: -3 ... 3))
-                            // Dreht jeden Punkt um den Ring, aber nur im Schweif-Bereich
-                            .rotationEffect(.degrees(Double(i) * 10.0))
-                            .opacity(1.0 - (Double(i) * 0.08)) // Verblasst
-                            .shadow(color: color, radius: 2) // Jeder Punkt glowt
-                    }
                 }
-                .rotationEffect(.degrees(-90)) // Startpunkt auf 12 Uhr
-                // Spiegelt den Schweif auf die linke Seite, wenn der Pfeil im Uhrzeigersinn (fallend) fliegt
-                .scaleEffect(x: isFalling ? -1 : 1, y: 1)
+                // Dreht den Gradienten um, wenn er im Uhrzeigersinn kreist
+                .scaleEffect(y: isFalling ? -1 : 1)
+                // Dies ist die dynamische Orbit-Rotation
+                .rotationEffect(.degrees(tailRotation))
             }
 
-            // 🟢 2. ZENTRIPETAL-PFEILKOPF (zeigt in die Mitte, Spitze auf dem Ring)
+            // 🟢 2. DIE STATISCHE PFEILSPITZE
             Path { path in
-                path.move(to: CGPoint(x: arrowSize / 2, y: 0)) // Spitze
-                path.addLine(to: CGPoint(x: arrowSize, y: arrowSize))
-                path.addLine(to: CGPoint(x: arrowSize / 2, y: arrowSize * 0.65)) // Einkerbung hinten
-                path.addLine(to: CGPoint(x: 0, y: arrowSize))
+                path.move(to: CGPoint(x: arrowSize, y: arrowSize / 2)) // Spitze rechts
+                path.addLine(to: CGPoint(x: 0, y: 0)) // Oben links
+                path.addLine(to: CGPoint(x: arrowSize * 0.4, y: arrowSize / 2)) // Einkerbung hinten
+                path.addLine(to: CGPoint(x: 0, y: arrowSize)) // Unten links
                 path.closeSubpath()
             }
             .fill(color)
-            .shadow(color: color.opacity(0.8), radius: 6, x: 0, y: 0)
+            .shadow(color: color.opacity(0.8), radius: 4)
             .frame(width: arrowSize, height: arrowSize)
-            // 🟢 HIER: Spitze 90 Grad im Uhrzeigersinn gedreht (Pfeil zeigt radial in die Mitte)
-            .rotationEffect(.degrees(isFlat ? 0 : 180))
-            // Setzt den Pfeil auf den Rand. Wenn Flat, gleitet er nach außen und innen (flatOffset)
-            .offset(y: -radius + flatOffset)
+            // Die Atmungs-Animation drückt den Pfeil sanft nach außen und innen
+            .offset(x: radius + breatheOffset)
+            // Rotiert den Pfeil auf seine feste Uhrzeit (z.B. -90 für 12 Uhr)
+            .rotationEffect(.degrees(angleFromThree))
         }
         .frame(width: size, height: size)
-        // 1. Basis-Rotation für den echten Trend-Winkel
-        .rotationEffect(.degrees(degree))
-        // 2. Orbit-Animation, die sich dazu addiert
-        .rotationEffect(.degrees(spinDegree))
-
-        // Trigger für die Animation, sobald ein neuer Glukosewert reinkommt
-        .onChange(of: dateString) { _ in startHardwareAnimation() }
-        .onAppear { startHardwareAnimation() }
+        .onChange(of: dateString) { _ in startHardwareAnimation(isRising: isRising, isFlat: isFlat) }
+        .onAppear { startHardwareAnimation(isRising: isRising, isFlat: isFlat) }
     }
 
-    func startHardwareAnimation() {
-        // 1. Hard-Reset ohne Animation (Setzt Pfeil sofort zurück)
+    func startHardwareAnimation(isRising: Bool, isFlat: Bool) {
+        // Reset states to prevent glitches
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            spinDegree = 0
-            // Start-Position für den Left-to-Right Effekt (Pfeil gleitet von links rein)
-            flatOffset = isFlat ? 8 : 0
+            tailRotation = 0
+            breatheOffset = -1
+            sparkleOpacity = 0.2
         }
 
-        // 2. 🟢 Hardware-beschleunigte Animation (CoreAnimation) - Main-Thread entlastet!
+        // Hardware beschleunigte Animationen ausführen (15 Sekunden lang)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            if isRising {
-                // Langsamer: 10 Runden à 1.5s = Exakt 15 Sekunden. Bleibt am Ende perfekt auf der Position stehen!
-                withAnimation(.linear(duration: 1.5).repeatCount(10, autoreverses: false)) {
-                    spinDegree = -360 // Gegen den Uhrzeigersinn
+            // 1. Die Atmung des Pfeils (Für alle Richtungen)
+            withAnimation(.easeInOut(duration: 1.0).repeatCount(15, autoreverses: true)) {
+                breatheOffset = 3 // Atmet um 4px nach außen
+            }
+
+            // 2. Der Orbit oder das Funkeln
+            if isFlat {
+                // Funkeln: 15 Sekunden lang
+                withAnimation(.easeInOut(duration: 0.5).repeatCount(30, autoreverses: true)) {
+                    sparkleOpacity = 0.9
                 }
-            } else if isFalling {
-                // Langsamer: Uhrzeigersinn
+            } else {
+                // Orbit: Macht 10 volle Umdrehungen in 15 Sekunden
                 withAnimation(.linear(duration: 1.5).repeatCount(10, autoreverses: false)) {
-                    spinDegree = 360
-                }
-            } else if isFlat {
-                // 🟢 NEU: Gleitet für 15 Sekunden von links nach rechts (15 Durchläufe à 1s)
-                withAnimation(.easeInOut(duration: 1.0).repeatCount(15, autoreverses: true)) {
-                    // Gleitet nach außen (rechts), dann wieder zurück nach links
-                    flatOffset = -12
+                    // Steigend: Gegen den Uhrzeigersinn (-360). Fallend: Im Uhrzeigersinn (360)
+                    tailRotation = isRising ? -360 : 360
                 }
             }
         }
