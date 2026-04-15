@@ -163,23 +163,24 @@ final class BaseAPSManager: APSManager, Injectable {
                 self?.loop()
             }
             .store(in: &lifetime)
+
         pumpManager?.addStatusObserver(self, queue: processQueue)
 
         deviceDataManager.errorSubject
             .receive(on: processQueue)
             .map { APSError.pumpError($0) }
-            .sink {
-                self.processError($0)
+            .sink { [weak self] in
+                self?.processError($0)
             }
             .store(in: &lifetime)
 
         deviceDataManager.bolusTrigger
             .receive(on: processQueue)
-            .sink { bolusing in
+            .sink { [weak self] bolusing in
                 if bolusing {
-                    self.createBolusReporter()
+                    self?.createBolusReporter()
                 } else {
-                    self.clearBolusReporter()
+                    self?.clearBolusReporter()
                 }
             }
             .store(in: &lifetime)
@@ -187,7 +188,8 @@ final class BaseAPSManager: APSManager, Injectable {
         // manage a manual Temp Basal from OmniPod - Force loop() after stop a temp basal or finished
         deviceDataManager.manualTempBasal
             .receive(on: processQueue)
-            .sink { manualBasal in
+            .sink { [weak self] manualBasal in
+                guard let self = self else { return }
                 if manualBasal {
                     self.isManualTempBasal = true
                 } else {
@@ -196,6 +198,56 @@ final class BaseAPSManager: APSManager, Injectable {
                         self.loop()
                     }
                 }
+            }
+            .store(in: &lifetime)
+
+        // 🟢 NEU: Hochpriorisierter Timer für Loop UND CGM-Überwachung
+        Timer.publish(every: 300, on: .main, in: .common) // 300 Sekunden = 5 Minuten
+            .autoconnect()
+            .receive(on: processQueue)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+
+                // 1. Alter des letzten Glukosewerts ermitteln
+                let lastGlucoseDate = self.glucoseStorage.latestDate() ?? .distantPast
+                let timeSinceLastGlucose = Date().timeIntervalSince(lastGlucoseDate)
+
+                // 2. CGM-Wert aktiv anfordern, falls er älter als 6 Minuten ist
+                if timeSinceLastGlucose > 6.minutes.timeInterval {
+                    debug(.apsManager, "Glukosewert ist über 6 Minuten alt. Fordere CGM-Update an...")
+
+                    // Aktiven Abruf beim CGMManager triggern
+                    self.deviceDataManager.cgmManager?.fetchNewDataIfNeeded { result in
+                        switch result {
+                        case let .newData(values):
+                            debug(.apsManager, "Erfolgreich neue CGM-Daten abgerufen: \(values.count) neue Werte.")
+
+                        case .noData:
+                            debug(.apsManager, "CGM-Update erfolgreich angefordert, aber der Sensor hat noch keine neuen Daten.")
+
+                        case let .error(error):
+                            warning(.apsManager, "Fehler beim aktiven Abrufen der CGM-Daten: \(error.localizedDescription)")
+
+                        // 🟢 NEU: Der Default-Fall macht den Switch "exhaustive" und befriedigt den Compiler
+                        default:
+                            debug(.apsManager, "Anderes CGM-Ergebnis erhalten (wird ignoriert).")
+                        }
+                    }
+                }
+
+                // 3. Alarm auslösen, wenn der Wert älter als 15 Minuten ist
+                if timeSinceLastGlucose >= 15.minutes.timeInterval {
+                    let errorMessage = "Achtung: Seit 15 Minuten liegt kein neuer Glukosewert vor!"
+                    warning(.apsManager, errorMessage)
+
+                    // Fehler ins System werfen
+                    self.processError(APSError.glucoseError(message: errorMessage))
+
+                    // Optional: Push-Notification Logik hier einfügen
+                }
+
+                // 4. Den Loop-Durchlauf regulär anstoßen
+                self.loop()
             }
             .store(in: &lifetime)
     }
