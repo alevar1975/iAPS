@@ -70,6 +70,7 @@ enum APSError: LocalizedError {
 }
 
 final class BaseAPSManager: APSManager, Injectable {
+    let resolver: Resolver
     private let processQueue = DispatchQueue(label: "BaseAPSManager.processQueue")
     @Injected() private var appCoordinator: AppCoordinator!
     @Injected() private var storage: FileStorage!
@@ -139,6 +140,7 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     init(resolver: Resolver) {
+        self.resolver = resolver
         injectServices(resolver)
         openAPS = OpenAPS(
             storage: storage,
@@ -362,6 +364,11 @@ final class BaseAPSManager: APSManager, Injectable {
             reportEnacted(received: error == nil)
         }
 
+        let currentResolver = resolver
+        Task {
+            IAPSKIServerManager.shared.uploadCurrentSettings(resolver: currentResolver)
+        }
+
         // end of the BG tasks
         if let backgroundTask = backGroundTaskID {
             UIApplication.shared.endBackgroundTask(backgroundTask)
@@ -407,7 +414,6 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     func determineBasal() -> AnyPublisher<Bool, Never> {
-        let start = Date.now
         debug(.apsManager, "Start determine basal")
         guard let glucose = storage.retrieve(OpenAPS.Monitor.glucose, as: [BloodGlucose].self), glucose.isNotEmpty else {
             debug(.apsManager, "Not enough glucose data")
@@ -745,7 +751,9 @@ final class BaseAPSManager: APSManager, Injectable {
                 protein: protein,
                 note: "Remote",
                 enteredBy: "Nightscout operator",
-                isFPU: false
+                isFPU: false,
+                kcal: nil,
+                duration: nil // 🟢 FIX: Dauer für Mahlzeiten-Befehle (Nightscout)
             )])
 
             announcementsStorage.storeAnnouncements([announcement], enacted: true)
@@ -1434,10 +1442,22 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     private func clearBolusReporter() {
+        // 🟢 NEU: Merken, ob tatsächlich gerade ein Bolus überwacht wurde
+        let wasBolusing = bolusReporter != nil
+
         bolusReporter?.removeObserver(self)
         bolusReporter = nil
-        processQueue.asyncAfter(deadline: .now() + 0.5) {
+
+        // 🟢 FIX: Wir erhöhen die Wartezeit leicht auf 2.0 Sekunden,
+        // damit der Pumpenstatus im System auch wirklich sicher auf "nicht mehr bolusing" steht.
+        processQueue.asyncAfter(deadline: .now() + 2.0) {
             self.bolusProgress.send(nil)
+
+            // 🟢 NEU: Wenn ein Bolus lief und jetzt fertig ist, triggern wir sofort den Loop!
+            if wasBolusing {
+                debug(.apsManager, "Manueller Bolus beendet. Erzwungener Loop-Durchlauf startet.")
+                self.loop()
+            }
         }
     }
 }

@@ -3,6 +3,15 @@ import SwiftUI
 
 struct FoodItemInfoPopup: View {
     let foodItem: FoodItemDetailed
+    let onPortionChange: ((Decimal) -> Void)?
+
+    @State private var multiplier: Decimal
+
+    init(foodItem: FoodItemDetailed, onPortionChange: ((Decimal) -> Void)? = nil) {
+        self.foodItem = foodItem
+        self.onPortionChange = onPortionChange
+        _multiplier = State(initialValue: foodItem.portionSizeOrMultiplier)
+    }
 
     private var shouldShowStandardServing: Bool {
         let hasDescription = foodItem.standardServing != nil && !(foodItem.standardServing?.isEmpty ?? true)
@@ -26,88 +35,94 @@ struct FoodItemInfoPopup: View {
         return "Standard Serving"
     }
 
+    private func calculatedNutrient(for nutrient: NutrientType) -> Decimal? {
+        guard let baseValue = foodItem.nutrition.values[nutrient] else { return nil }
+        return foodItem.isPerServing ? (baseValue * multiplier) : (baseValue * (multiplier / 100))
+    }
+
+    private func calculatedCalories() -> Decimal {
+        let carbs = calculatedNutrient(for: .carbs) ?? 0
+        let fat = calculatedNutrient(for: .fat) ?? 0
+        let protein = calculatedNutrient(for: .protein) ?? 0
+        return (carbs * 4) + (protein * 4) + (fat * 9)
+    }
+
     var body: some View {
         let unit = (foodItem.units ?? .grams).dimension.symbol
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Title and image
-                HStack(alignment: .top, spacing: 12) {
-                    Text(foodItem.name)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 20) {
+                // Titel
+                Text(foodItem.name)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                    .padding(.horizontal)
+                    .padding(.top, 10)
 
-                    // Product image (if available)
-                    FoodItemLargeImage(imageURL: foodItem.imageURL)
-                }
-                .padding(.horizontal)
+                // Portionen-Steuerung (iPhone 17 Style Pill)
+                if onPortionChange != nil {
+                    HStack {
+                        HStack(spacing: 0) {
+                            Button(action: {
+                                let step: Decimal = foodItem.isPerServing ? 0.5 : 10.0
+                                let minVal: Decimal = foodItem.isPerServing ? 0.5 : 10.0
+                                if multiplier > minVal {
+                                    multiplier -= step
+                                    onPortionChange?(multiplier)
+                                }
+                            }) {
+                                Image(systemName: "minus")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.primary)
+                                    .frame(width: 44, height: 40)
+                            }
 
-                if let visualCues = foodItem.visualCues, !visualCues.isEmpty {
-                    FoodInfoCard(icon: "eye.fill", title: "Visual Cues", content: visualCues, color: .blue, embedIcon: true)
-                        .padding(.horizontal)
-                }
+                            HStack(spacing: 4) {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
 
-                HStack(spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "scalemass.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.primary)
-                            .opacity(0.3)
+                                let displayVal = Double(truncating: multiplier as NSNumber)
+                                let isInt = floor(displayVal) == displayVal
+                                Text(
+                                    "\(displayVal, specifier: isInt ? "%.0f" : "%.1f") \(foodItem.isPerServing ? "servings" : unit)"
+                                )
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 8)
 
-                        HStack(spacing: 3) {
-                            switch foodItem.nutrition {
-                            case let .per100(_, portionSize):
-                                Text(String(format: "%.0f", Double(truncating: portionSize as NSNumber)))
-                                    .font(.system(size: 17, weight: .bold))
+                            Button(action: {
+                                let step: Decimal = foodItem.isPerServing ? 0.5 : 10.0
+                                multiplier += step
+                                onPortionChange?(multiplier)
+                            }) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(.primary)
-                                Text(unit)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(.primary)
-                                    .opacity(0.4)
-                            case let .perServing(_, multiplier):
-                                Text(String(format: "%.0f", Double(truncating: multiplier as NSNumber)))
-                                    .font(.system(size: 17, weight: .bold))
-                                    .foregroundColor(.primary)
-                                Text(multiplier == 1 ? "serving" : "servings")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(.primary)
-                                    .opacity(0.4)
+                                    .frame(width: 44, height: 40)
                             }
                         }
+                        .background(Color(.systemGray5))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                        Spacer()
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(Color(.systemGray4))
-                    .cornerRadius(10)
-
-                    Spacer()
-
-                    HStack(spacing: 8) {
-                        if foodItem.source.isAI, let confidence = foodItem.confidence {
-                            ConfidenceBadge(level: confidence)
-                        }
-
-                        Image(systemName: foodItem.source.icon)
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                    }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
 
+                // Nährwert-Tabelle
                 VStack(spacing: 8) {
-                    // Header row
                     HStack(spacing: 8) {
                         Text("")
                             .frame(maxWidth: .infinity, alignment: .leading)
-
                         Text("This portion")
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(.secondary)
                             .frame(width: 90, alignment: .trailing)
-
                         Text(foodItem.isPerServing ? "Per serving" : "Per 100\(unit)")
                             .font(.caption)
                             .fontWeight(.semibold)
@@ -123,7 +138,9 @@ struct FoodItemInfoPopup: View {
                             Divider()
                             DetailedNutritionRow(
                                 localizedLabel: nutrient.localizedLabel,
-                                portionValue: foodItem.nutrientInThisPortion(nutrient),
+                                iconName: icon(for: nutrient),
+                                iconColor: color(for: nutrient),
+                                portionValue: calculatedNutrient(for: nutrient),
                                 per100Value: nutrientValue,
                                 unit: nutrient.unit
                             )
@@ -133,15 +150,17 @@ struct FoodItemInfoPopup: View {
                     Divider()
                     DetailedNutritionRow(
                         localizedLabel: NSLocalizedString("Calories", comment: ""),
-                        portionValue: foodItem.caloriesInThisPortion,
+                        iconName: "flame.fill",
+                        iconColor: .red,
+                        portionValue: calculatedCalories(),
                         per100Value: foodItem.nutrition.values.calories,
                         unit: UnitEnergy.kilocalories
                     )
                 }
                 .padding(12)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(.secondarySystemGroupedBackground))
                 )
                 .padding(.horizontal)
 
@@ -155,52 +174,62 @@ struct FoodItemInfoPopup: View {
                         standardServingContent(foodItem: foodItem)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+                    .padding(16)
                     .background(Color(.tertiarySystemGroupedBackground))
-                    .cornerRadius(12)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .padding(.horizontal)
                 }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    if let preparation = foodItem.preparationMethod, !preparation.isEmpty {
-                        FoodInfoCard(
-                            icon: "flame.fill",
-                            title: "Preparation",
-                            content: preparation,
-                            color: .orange,
-                            embedIcon: true
-                        )
-                    }
-                    if let notes = foodItem.assessmentNotes, !notes.isEmpty {
-                        FoodInfoCard(icon: "note.text", title: "Notes", content: notes, color: .gray, embedIcon: true)
-                    }
-                }
-                .padding(.horizontal)
-
                 Spacer(minLength: 8)
             }
             .padding(.vertical)
+        }
+    }
+
+    private func icon(for nutrient: NutrientType) -> String {
+        switch nutrient {
+        case .carbs: return "leaf.fill"
+        case .fat: return "drop.fill"
+        case .protein: return "bolt.fill"
+        default: return ""
+        }
+    }
+
+    private func color(for nutrient: NutrientType) -> Color {
+        switch nutrient {
+        case .carbs: return .primary
+        case .fat: return .blue
+        case .protein: return .green
+        default: return .secondary
         }
     }
 }
 
 private struct DetailedNutritionRow: View {
     let localizedLabel: String
+    let iconName: String
+    let iconColor: Color
     let portionValue: Decimal?
     let per100Value: Decimal?
     let unit: Dimension
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(localizedLabel)
-                .font(.subheadline)
-                .foregroundColor(.primary.opacity(0.8))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 6) {
+                if !iconName.isEmpty {
+                    Image(systemName: iconName)
+                        .foregroundColor(iconColor)
+                        .font(.system(size: 14))
+                        .frame(width: 16)
+                }
+                Text(localizedLabel)
+                    .font(.subheadline)
+                    .foregroundColor(.primary.opacity(0.8))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Per portion value
             if let value = portionValue, value > 0 {
                 HStack(spacing: 2) {
-                    Text("\(Double(value), specifier: "%.1f")")
+                    Text("\(Double(truncating: value as NSNumber), specifier: "%.1f")")
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -217,10 +246,9 @@ private struct DetailedNutritionRow: View {
                     .frame(width: 90, alignment: .trailing)
             }
 
-            // Per 100g/ml value
             if let value = per100Value, value > 0 {
                 HStack(spacing: 2) {
-                    Text("\(Double(value), specifier: "%.1f")")
+                    Text("\(Double(truncating: value as NSNumber), specifier: "%.1f")")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     Text(unit.symbol)

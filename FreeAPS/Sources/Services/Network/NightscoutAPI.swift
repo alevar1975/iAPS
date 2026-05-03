@@ -182,6 +182,10 @@ extension NightscoutAPI {
         components.queryItems = [
             URLQueryItem(name: "find[carbs][$exists]", value: "true"),
             URLQueryItem(
+                name: "find[enteredBy][$ne]",
+                value: "iAPS-History" // Verhindert, dass wir Makro-Uploads unbeabsichtigt löschen
+            ),
+            URLQueryItem(
                 name: arguments,
                 value: value
             )
@@ -458,7 +462,46 @@ extension NightscoutAPI {
         if let secret = secret {
             request.addValue(secret.sha1(), forHTTPHeaderField: "api-secret")
         }
-        request.httpBody = try? JSONCoding.encoder.encode(treatments)
+
+        do {
+            let originalData = try JSONCoding.encoder.encode(treatments)
+
+            if var jsonArray = try JSONSerialization.jsonObject(with: originalData, options: []) as? [[String: Any]] {
+                // Wir holen die ECHTE System-Zeitzone
+                let localTimeZone = NSTimeZone.system as TimeZone
+
+                // Wir bauen einen Datums-Formatierer, der +01:00 statt "Z" an den String hängt
+                let isoFormatter = ISO8601DateFormatter()
+                isoFormatter.timeZone = localTimeZone
+                isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+                let offset = localTimeZone.secondsFromGMT() / 60
+
+                for i in 0 ..< jsonArray.count {
+                    if let date = treatments[i].createdAt {
+                        // A) Den "Z" String mit der lokalen Zeit (+01:00) überschreiben!
+                        jsonArray[i]["created_at"] = isoFormatter.string(from: date)
+
+                        // B) Exakte Millisekunden für die Berichte berechnen
+                        jsonArray[i]["mills"] = Int(date.timeIntervalSince1970 * 1000)
+                    }
+
+                    // C) Zeitzone auch als Zahl mitschicken (falls Nightscout es braucht)
+                    jsonArray[i]["utcOffset"] = offset
+
+                    // D) Den Konflikt-Zeitstempel restlos entfernen!
+                    jsonArray[i].removeValue(forKey: "creation_date")
+                }
+
+                request.httpBody = try JSONSerialization.data(withJSONObject: jsonArray, options: [])
+            } else {
+                request.httpBody = originalData
+            }
+        } catch {
+            request.httpBody = try? JSONCoding.encoder.encode(treatments)
+        }
+        // --- ENDE DES FIXES ---
+
         request.httpMethod = "POST"
 
         return service.run(request)
@@ -697,6 +740,7 @@ extension NightscoutAPI {
             .eraseToAnyPublisher()
     }
 
+    // 🟢 HIER IST DIE NEUE FUNKTION AUS V2:
     /// Upload the previous day's log file (zlib-compressed) to open-iaps.app.
     func uploadLog(_ logData: Data, logDate: String, appId: String) -> AnyPublisher<Void, Swift.Error> {
         let statURL = IAPSconfig.statURL

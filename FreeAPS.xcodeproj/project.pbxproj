@@ -525,6 +525,14 @@
 		F2FEE7042D2DB1A000A91BB2 /* BGTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2FEE7032D2DB1A000A91BB2 /* BGTextField.swift */; };
 		F5CA3DB1F9DC8B05792BBFAA /* CGMDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B5C0607505A38F256BF99A /* CGMDataFlow.swift */; };
 		F5F7E6C1B7F098F59EB67EC5 /* TargetsEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA49538D56989D8DA6FCF538 /* TargetsEditorDataFlow.swift */; };
+		F748D05D2FA5387E00146A5A /* MealsRange.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D0562FA5387E00146A5A /* MealsRange.swift */; };
+		F748D05E2FA5387E00146A5A /* MealsCardContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D0582FA5387E00146A5A /* MealsCardContainerView.swift */; };
+		F748D05F2FA5387E00146A5A /* MealDaySummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D0552FA5387E00146A5A /* MealDaySummary.swift */; };
+		F748D0602FA5387E00146A5A /* MealsMacrosChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D05A2FA5387E00146A5A /* MealsMacrosChartView.swift */; };
+		F748D0612FA5387E00146A5A /* MealsHistorySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D0592FA5387E00146A5A /* MealsHistorySheet.swift */; };
+		F748D06F2FA5497900146A5A /* IAPSKIServerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D06C2FA5497900146A5A /* IAPSKIServerManager.swift */; };
+		F748D0702FA5497900146A5A /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D06D2FA5497900146A5A /* KeychainHelper.swift */; };
+		F748D0712FA5497900146A5A /* IAPSKIConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F748D06B2FA5497900146A5A /* IAPSKIConfigView.swift */; };
 		F816825E28DB441200054060 /* HeartBeatManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F816825D28DB441200054060 /* HeartBeatManager.swift */; };
 		F816826028DB441800054060 /* BluetoothTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F816825F28DB441800054060 /* BluetoothTransmitter.swift */; };
 		F90692AA274B7AAE0037068D /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90692A9274B7AAE0037068D /* HealthKitManager.swift */; };
@@ -1224,6 +1232,14 @@
 		F2FA688F2EEC538F00476D7B /* AIProviderClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviderClient.swift; sourceTree = "<group>"; };
 		F2FA68932EEC87D200476D7B /* AIProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProgressView.swift; sourceTree = "<group>"; };
 		F2FEE7032D2DB1A000A91BB2 /* BGTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGTextField.swift; sourceTree = "<group>"; };
+		F748D0552FA5387E00146A5A /* MealDaySummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealDaySummary.swift; sourceTree = "<group>"; };
+		F748D0562FA5387E00146A5A /* MealsRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealsRange.swift; sourceTree = "<group>"; };
+		F748D0582FA5387E00146A5A /* MealsCardContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealsCardContainerView.swift; sourceTree = "<group>"; };
+		F748D0592FA5387E00146A5A /* MealsHistorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealsHistorySheet.swift; sourceTree = "<group>"; };
+		F748D05A2FA5387E00146A5A /* MealsMacrosChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealsMacrosChartView.swift; sourceTree = "<group>"; };
+		F748D06B2FA5497900146A5A /* IAPSKIConfigView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPSKIConfigView.swift; sourceTree = "<group>"; };
+		F748D06C2FA5497900146A5A /* IAPSKIServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPSKIServerManager.swift; sourceTree = "<group>"; };
+		F748D06D2FA5497900146A5A /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		F816825D28DB441200054060 /* HeartBeatManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HeartBeatManager.swift; sourceTree = "<group>"; };
 		F816825F28DB441800054060 /* BluetoothTransmitter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BluetoothTransmitter.swift; sourceTree = "<group>"; };
 		F90692A9274B7AAE0037068D /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
@@ -1485,7 +1501,6 @@
 		198377CF266BFEDE004DE65E /* Localizations */ = {
 			isa = PBXGroup;
 			children = (
-				FEBEEC142E03F45B005473DC /* Settings.bundle */,
 				196F58CD2BDCFF80009CBF1B /* InfoPlists */,
 				19D440A926B6FEBD008DA6C8 /* Main */,
 				191D529D2BAB4982003F52E1 /* Shortcuts */,
@@ -1683,6 +1698,8 @@
 		3811DE0325C9D31700A708ED /* Modules */ = {
 			isa = PBXGroup;
 			children = (
+				F748D06E2FA5497900146A5A /* Netcup */,
+				F748D05C2FA5387E00146A5A /* Meals */,
 				6DC5D590658EF8B8DF94F9F5 /* AddCarbs */,
 				A9A4C88374496B3C89058A89 /* AddTempTarget */,
 				198F67B42CFCBD5D00E538CB /* AutoISF */,
@@ -3058,6 +3075,44 @@
 			path = NotificationsConfig;
 			sourceTree = "<group>";
 		};
+		F748D0572FA5387E00146A5A /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F748D0552FA5387E00146A5A /* MealDaySummary.swift */,
+				F748D0562FA5387E00146A5A /* MealsRange.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		F748D05B2FA5387E00146A5A /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				F748D0582FA5387E00146A5A /* MealsCardContainerView.swift */,
+				F748D0592FA5387E00146A5A /* MealsHistorySheet.swift */,
+				F748D05A2FA5387E00146A5A /* MealsMacrosChartView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F748D05C2FA5387E00146A5A /* Meals */ = {
+			isa = PBXGroup;
+			children = (
+				F748D0572FA5387E00146A5A /* Models */,
+				F748D05B2FA5387E00146A5A /* Views */,
+			);
+			path = Meals;
+			sourceTree = "<group>";
+		};
+		F748D06E2FA5497900146A5A /* Netcup */ = {
+			isa = PBXGroup;
+			children = (
+				F748D06B2FA5497900146A5A /* IAPSKIConfigView.swift */,
+				F748D06C2FA5497900146A5A /* IAPSKIServerManager.swift */,
+				F748D06D2FA5497900146A5A /* KeychainHelper.swift */,
+			);
+			path = Netcup;
+			sourceTree = "<group>";
+		};
 		F75CB57ED6971B46F8756083 /* CGM */ = {
 			isa = PBXGroup;
 			children = (
@@ -3563,6 +3618,9 @@
 				FE66D16B291F74F8005D6F77 /* Bundle+Extensions.swift in Sources */,
 				F2C73D622EB6602D00B700AB /* MainChartConfigDataFlow.swift in Sources */,
 				3883581C25EE79BB00E024B2 /* DecimalTextField.swift in Sources */,
+				F748D06F2FA5497900146A5A /* IAPSKIServerManager.swift in Sources */,
+				F748D0702FA5497900146A5A /* KeychainHelper.swift in Sources */,
+				F748D0712FA5497900146A5A /* IAPSKIConfigView.swift in Sources */,
 				6B1A8D2E2B156EEF00E76752 /* LiveActivityBridge.swift in Sources */,
 				F25D82832F61950B007AE22C /* FoodSearchBar.swift in Sources */,
 				38F37828261260DC009DB701 /* Color+Extensions.swift in Sources */,
@@ -3673,6 +3731,11 @@
 				CA370FC152BC98B3D1832968 /* BasalProfileEditorRootView.swift in Sources */,
 				195D80BB2AF6980B00D25097 /* DynamicStateModel.swift in Sources */,
 				F2941FA52E787FCC00A9DD5D /* AppGroupCGMSettingsViewController.swift in Sources */,
+				F748D05D2FA5387E00146A5A /* MealsRange.swift in Sources */,
+				F748D05E2FA5387E00146A5A /* MealsCardContainerView.swift in Sources */,
+				F748D05F2FA5387E00146A5A /* MealDaySummary.swift in Sources */,
+				F748D0602FA5387E00146A5A /* MealsMacrosChartView.swift in Sources */,
+				F748D0612FA5387E00146A5A /* MealsHistorySheet.swift in Sources */,
 				E00EEC0327368630002FF094 /* ServiceAssembly.swift in Sources */,
 				38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */,
 				19012CDC291D2CB900FB8210 /* LoopStats.swift in Sources */,
@@ -4162,7 +4225,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = $APP_BUILD_NUMBER;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -4216,7 +4279,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = $APP_BUILD_NUMBER;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -4271,7 +4334,7 @@
 				CODE_SIGN_ENTITLEMENTS = "FreeAPSWatch WatchKit Extension/FreeAPSWatch WatchKit Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = $APP_BUILD_NUMBER;
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FreeAPSWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = iAPS;
@@ -4315,7 +4378,7 @@
 				CODE_SIGN_ENTITLEMENTS = "FreeAPSWatch WatchKit Extension/FreeAPSWatch WatchKit Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = $APP_BUILD_NUMBER;
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FreeAPSWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = iAPS;
@@ -4348,7 +4411,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				INFOPLIST_FILE = FreeAPSTests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.3;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -4369,7 +4432,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				INFOPLIST_FILE = FreeAPSTests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.3;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -4394,7 +4457,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -4428,7 +4491,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
+				DEVELOPMENT_TEAM = 5CF57H4QA2;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;

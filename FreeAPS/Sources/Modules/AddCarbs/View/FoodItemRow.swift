@@ -20,50 +20,70 @@ struct FoodItemRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Main Row Content
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text(foodItem.name)
-                            .font(.body)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-
-                        if foodItem.source.isAI, let confidence = foodItem.confidence {
-                            ConfidenceBadge(level: confidence)
-                        }
+            VStack(alignment: .leading, spacing: 8) {
+                // Name Row
+                HStack {
+                    Text(foodItem.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer()
+                    if foodItem.source.isAI, let confidence = foodItem.confidence {
+                        ConfidenceBadge(level: confidence)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
-                    HStack(spacing: 8) {
-                        Button(action: {
-                            showPortionAdjuster = true
-                        }) {
-                            PortionSizeBadge(
-                                value: foodItem.portionSizeOrMultiplier,
-                                color: .orange,
-                                icon: "scalemass.fill",
-                                foodItem: foodItem
+                // Portion Button (Gray Pill)
+                if onPortionChange != nil {
+                    Button(action: {
+                        showPortionAdjuster = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.fill")
+                                .font(.caption)
+                            let val = Double(truncating: foodItem.portionSizeOrMultiplier as NSNumber)
+                            let isInt = floor(val) == val
+                            Text(
+                                "\(val, specifier: isInt ? "%.0f" : "%.1f") \(foodItem.isPerServing ? "serving" : (foodItem.units?.dimension.symbol ?? "g"))"
                             )
+                            .font(.caption)
+                            .fontWeight(.medium)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(.systemGray5))
+                        .foregroundColor(.secondary)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
 
-                        if case .per100 = foodItem.nutrition {
-                            if let servingSize = foodItem.standardServingSize {
-                                Text("\(Double(foodItem.portionSizeOrMultiplier / servingSize), specifier: "%.1f")× serving")
-                                    .font(.caption)
-                                    .foregroundColor(.primary)
-                                    .opacity(0.7)
-                            }
+                // Nährwert Icons (Blatt, Blitz, Tropfen, Flamme)
+                HStack(spacing: 12) {
+                    ForEach(NutrientType.allCases.filter { $0.isPrimary }) { nutrient in
+                        HStack(spacing: 4) {
+                            Image(systemName: icon(for: nutrient))
+                                .foregroundColor(color(for: nutrient))
+                                .font(.system(size: 12))
+                            Text(
+                                "\(Double(truncating: (foodItem.nutrientInThisPortion(nutrient) ?? 0) as NSNumber), specifier: "%.1f")g"
+                            )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         }
                     }
-                }
 
-                if foodItem.imageURL != nil {
-                    FoodItemThumbnail(imageURL: foodItem.imageURL)
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .foregroundColor(.red)
+                            .font(.system(size: 12))
+                        Text("\(Double(truncating: (foodItem.caloriesInThisPortion ?? 0) as NSNumber), specifier: "%.0f") kcal")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
+                .padding(.top, 2)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -101,35 +121,17 @@ struct FoodItemRow: View {
                     }
                 }
             }
-
-            HStack(spacing: 6) {
-                ForEach(NutrientType.allCases.filter { $0.isPrimary }) { nutrient in
-                    NutritionBadgePlain(
-                        value: foodItem.nutrientInThisPortion(nutrient) ?? 0,
-                        localizedLabel: nutrient.localizedLabel,
-                        color: nutrient.badgeColor
-                    )
-                }
-                NutritionBadgePlain(
-                    value: foodItem.caloriesInThisPortion,
-                    unit: UnitEnergy.kilocalories,
-                    color: NutritionBadgeConfig.caloriesColor
-                )
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
         }
         .padding(.top, isFirst ? 8 : 0)
         .padding(.bottom, isLast ? 8 : 0)
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground)) // Hellerer moderner Look
         .when(onDelete != nil) { view in
             view.swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button {
+                Button(role: .destructive) {
                     onDelete?()
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
-                .tint(.red)
             }
         }
         .when(onPortionChange != nil) { view in
@@ -142,28 +144,42 @@ struct FoodItemRow: View {
                 .tint(.orange)
             }
         }
-        .when(onPortionChange != nil) { view in
-            view.sheet(isPresented: $showPortionAdjuster) {
-                PortionAdjusterView(
-                    foodItem: foodItem,
-                    onSave: { newPortion in
-                        onPortionChange?(newPortion)
-                        showPortionAdjuster = false
-                    },
-                    onCancel: {
-                        showPortionAdjuster = false
-                    }
-                )
-                .presentationDetents([
-                    .height(foodItem.hasNutritionValues ? 420 : 340)
-                ])
-                .presentationDragIndicator(.visible)
-            }
+        .sheet(isPresented: $showPortionAdjuster) {
+            PortionAdjusterView(
+                foodItem: foodItem,
+                onSave: { newPortion in
+                    onPortionChange?(newPortion)
+                    showPortionAdjuster = false
+                },
+                onCancel: {
+                    showPortionAdjuster = false
+                }
+            )
+            .presentationDetents([.height(foodItem.hasNutritionValues ? 420 : 340)])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showItemInfo) {
-            FoodItemInfoPopup(foodItem: foodItem)
+            FoodItemInfoPopup(foodItem: foodItem, onPortionChange: onPortionChange)
                 .presentationDetents([.height(foodItem.preferredInfoSheetHeight()), .large])
                 .presentationDragIndicator(.visible)
+        }
+    }
+
+    private func icon(for nutrient: NutrientType) -> String {
+        switch nutrient {
+        case .carbs: return "leaf.fill"
+        case .fat: return "drop.fill"
+        case .protein: return "bolt.fill"
+        default: return ""
+        }
+    }
+
+    private func color(for nutrient: NutrientType) -> Color {
+        switch nutrient {
+        case .carbs: return .primary
+        case .fat: return .blue
+        case .protein: return .green
+        default: return .secondary
         }
     }
 }

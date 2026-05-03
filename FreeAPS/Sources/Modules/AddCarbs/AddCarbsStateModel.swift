@@ -2,6 +2,33 @@ import CoreData
 import Foundation
 import SwiftUI
 
+// Lightweight Structs nur für die Mahlzeiten-Regeln der KI
+struct IAPSMealRule: Codable, Equatable {
+    let category: String
+    let overridePct: Int
+    let durationHours: Double
+    let expectedPeakHours: Double
+    let avgMaxBg: Int
+    let iapsUnderprediction: Int
+
+    enum CodingKeys: String, CodingKey {
+        case category
+        case overridePct = "override_pct"
+        case durationHours = "duration_hours"
+        case expectedPeakHours = "expected_peak_hours"
+        case avgMaxBg = "avg_max_bg"
+        case iapsUnderprediction = "iaps_underprediction"
+    }
+}
+
+struct IAPSActionsResponse: Codable {
+    let mealRules: [IAPSMealRule]?
+
+    enum CodingKeys: String, CodingKey {
+        case mealRules = "meal_rules"
+    }
+}
+
 extension AddCarbs {
     final class StateModel: BaseStateModel<Provider> {
         @Injected() var carbsStorage: CarbsStorage!
@@ -26,8 +53,13 @@ extension AddCarbs {
         @Published var presetToEdit: Presets?
         @Published var edit = false
         @Published var ai = false
+        @Published var skipSave = false
 
         @Published var combinedPresets: [(preset: Presets?, portions: Double)] = []
+        @Published var mealRules: [IAPSMealRule] = []
+
+        // Variable für deine manuelle oder automatische Dauer-Eingabe
+        @Published var customDuration: Decimal = 0
 
         let now = Date.now
 
@@ -41,9 +73,59 @@ extension AddCarbs {
             skipBolus = settingsManager.settings.skipBolusScreenAfterCarbs
             useFPUconversion = settingsManager.settings.useFPUconversion
             ai = settingsManager.settings.ai
+            skipSave = (settingsManager.settings.skipSave != nil)
+
+            fetchMealRules()
         }
 
-        func add(_ continue_: Bool, fetch: Bool) {
+        func fetchMealRules() {
+            guard let url = URL(string: "https://alentestetkidiab.de/weekly_actions_latest.json") else { return }
+            URLSession.shared.dataTask(with: url) { data, _, _ in
+                guard let data = data else { return }
+                if let decoded = try? JSONDecoder().decode(IAPSActionsResponse.self, from: data) {
+                    DispatchQueue.main.async {
+                        self.mealRules = decoded.mealRules ?? []
+                    }
+                }
+            }.resume()
+        }
+
+        func evaluateMeal() -> IAPSMealRule? {
+            let c = NSDecimalNumber(decimal: carbs).doubleValue
+            let f = NSDecimalNumber(decimal: fat).doubleValue
+            let p = NSDecimalNumber(decimal: protein).doubleValue
+
+            var detectedCategory = ""
+            if f > 25 || p > 35 {
+                if c > 40 { detectedCategory = "Mixed (Pizza-Effekt)" }
+                else { detectedCategory = "High FPU (Fett/Protein)" }
+            } else if c > 30 {
+                detectedCategory = "High Carb"
+            }
+
+            return mealRules.first(where: { $0.category == detectedCategory })
+        }
+
+        // 🟢 FIX: Alles durchgehend als 'Decimal' rechnen, um Typ-Konflikte mit 'adjustment' zu vermeiden
+        func getIAPSStandardDuration() -> Double {
+            if fat == 0, protein == 0 { return 0 } // Normale Kohlenhydrate ohne FPU-Streckung
+
+            let adjustment = settings.settings.individualAdjustmentFactor
+            let timeCap = settings.settings.timeCap
+
+            let kcal = protein * 4 + fat * 9
+            let carbEquivalents = (kcal / 10) * adjustment
+            let fpus = carbEquivalents / 10
+
+            switch fpus {
+            case ..<2: return 3
+            case 2 ..< 3: return 4
+            case 3 ..< 4: return 5
+            default: return Double(timeCap)
+            }
+        }
+
+        func add(_ continue_: Bool, fetch: Bool, customDuration: Double? = nil) {
             guard carbs > 0 || fat > 0 || protein > 0 else {
                 showModal(for: nil)
                 return
@@ -60,52 +142,22 @@ extension AddCarbs {
                 protein: protein,
                 note: note,
                 enteredBy: CarbsEntry.manual,
-                isFPU: false
+                isFPU: false,
+                kcal: nil,
+                duration: customDuration
             )]
-            add(continue_, fetch: fetch, carbsToStore: carbsToStore)
-        }
 
-        func addAIFood(_ continue_: Bool, fetch: Bool, food: FoodItemDetailed, date: Date?) {
-            var carbs = food.nutrientInThisPortion(.carbs) ?? 0
-            let fat = food.nutrientInThisPortion(.fat) ?? 0
-            let protein = food.nutrientInThisPortion(.protein) ?? 0
-            guard carbs > 0 || fat > 0 || protein > 0 else {
-                showModal(for: nil)
-                return
-            }
-            carbs = min(carbs, maxCarbs)
-            id_ = UUID().uuidString
-
-            let carbsToStore = [CarbsEntry(
-                id: id_,
-                createdAt: now,
-                actualDate: date,
-                carbs: carbs,
-                fat: fat,
-                protein: protein,
-                note: nil,
-                enteredBy: CarbsEntry.manual,
-                isFPU: false
-            )]
-            add(continue_, fetch: fetch, carbsToStore: carbsToStore)
-        }
-
-        func add(_ continue_: Bool, fetch: Bool, carbsToStore: [CarbsEntry]) {
             if hypoTreatment { hypo() }
-            let carbs = carbsToStore.map(\.carbs).reduce(0, +)
-            let fat = carbsToStore.compactMap(\.fat).reduce(0, +)
-            let protein = carbsToStore.compactMap(\.protein).reduce(0, +)
-            let empty = carbs <= 0 && fat <= 0 && protein <= 0
 
             if (skipBolus && !continue_ && !fetch) || hypoTreatment {
-                carbsStorage.storeCarbs(carbsToStore)
+                carbsStorage.storeCarbs(carbsToStore, customDuration: customDuration)
                 apsManager.determineBasalSync()
                 showModal(for: nil)
             } else if carbs > 0 {
                 saveToCoreData(carbsToStore)
                 showModal(for: .bolus(waitForSuggestion: true, fetch: true))
             } else if !empty {
-                carbsStorage.storeCarbs(carbsToStore)
+                carbsStorage.storeCarbs(carbsToStore, customDuration: customDuration)
                 apsManager.determineBasalSync()
                 showModal(for: nil)
             } else {
@@ -248,16 +300,13 @@ extension AddCarbs {
         private func hypo() {
             let os = OverrideStorage()
 
-            // Cancel any eventual Other Override already active
             if let activeOveride = os.fetchLatestOverride().first {
                 let presetName = os.isPresetName()
-                // Is the Override a Preset?
                 if let preset = presetName {
                     if let duration = os.cancelProfile() {
-                        // Update in Nightscout
                         nightscoutManager.editOverride(preset, duration, activeOveride.date ?? Date.now)
                     }
-                } else if activeOveride.isPreset { // Because hard coded Hypo treatment isn't actually a preset
+                } else if activeOveride.isPreset {
                     if let duration = os.cancelProfile() {
                         nightscoutManager.editOverride("📉", duration, activeOveride.date ?? Date.now)
                     }
@@ -273,7 +322,6 @@ extension AddCarbs {
             guard let profileID = id, profileID != "None" else {
                 return
             }
-            // Enable New Override
             if profileID == "Hypo Treatment" {
                 let override = OverridePresets(context: coredataContextBackground)
                 override.percentage = 90
@@ -285,7 +333,6 @@ extension AddCarbs {
                 override.date = Date.now
                 override.indefinite = false
                 os.overrideFromPreset(override, profileID)
-                // Upload to Nightscout
                 nightscoutManager.uploadOverride(
                     "📉",
                     Double(45),

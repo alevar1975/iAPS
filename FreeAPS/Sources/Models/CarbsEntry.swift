@@ -10,6 +10,8 @@ struct CarbsEntry: JSON, Equatable, Hashable {
     let note: String?
     let enteredBy: String?
     let isFPU: Bool?
+    let kcal: Decimal?
+    let duration: Double? // 🟢 NEU: Speichert die KI-Dauer oder die manuell gestreckte Zeit
 
     static let manual = "iAPS"
     static let watch = "iAPS Watch"
@@ -37,5 +39,18 @@ extension CarbsEntry {
         case note
         case enteredBy
         case isFPU
+        case kcal
+        case duration // 🟢 NEU: Schlüssel für das JSON-Encoding/Decoding
+    }
+
+    var kcalValue: Decimal {
+        if let kcal {
+            return kcal
+        }
+        let c = carbs
+        let f = fat ?? 0
+        let p = protein ?? 0
+        // 4 kcal/g Carbs & Protein, 9 kcal/g Fat
+        return c * 4 + f * 9 + p * 4
     }
 }

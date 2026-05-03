@@ -17,9 +17,11 @@ final class CarbPresetIntentRequest: BaseIntentsRequest {
                 carbs: carbs,
                 fat: Decimal(quantityFat),
                 protein: Decimal(quantityProtein),
-                note: "with shortcut",
+                note: "add with shortcuts",
                 enteredBy: CarbsEntry.shortcut,
-                isFPU: (quantityFat > 0 || quantityProtein > 0) ? true : false
+                isFPU: (quantityFat > 0 || quantityProtein > 0) ? true : false,
+                kcal: nil,
+                duration: nil // 🟢 FIX: Dauer hinzugefügt
             )]
         )
         var resultDisplay: String

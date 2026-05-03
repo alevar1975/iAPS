@@ -118,36 +118,65 @@ extension OverrideProfilesConfig {
                     }
                 }
 
-                // Insulin Slider
+                // MARK: - Modern v1 Insulin Slider UI
+
                 Section {
-                    VStack {
-                        Spacer()
-                        Text(
-                            (formatter.string(from: state.percentage as NSNumber) ?? "")
-                                + " %"
-                        )
-                        .foregroundColor(
-                            state
-                                .percentage >= 130 ? .red :
-                                (isEditing ? .orange : .blue)
-                        )
-                        .font(.largeTitle)
+                    VStack(spacing: 15) {
+                        Text("\(formatter.string(from: state.percentage as NSNumber) ?? "") %")
+                            .foregroundStyle(state.percentage >= 130 ? .red : (isEditing ? .orange : .blue))
+                            .font(.system(size: 46, weight: .black, design: .rounded))
+                            // Slot-Machine effect for smooth number transitions
+                            .contentTransition(.numericText(value: state.percentage))
+                            .animation(.snappy, value: state.percentage)
+                            .padding(.top, 10)
+
                         let max: Double = state.extended_overrides ? 400 : 200
-                        Slider(
-                            value: $state.percentage,
-                            in: 10 ... max,
-                            step: 1,
-                            onEditingChanged: { editing in
-                                isEditing = editing
+
+                        HStack(spacing: 15) {
+                            // Minus Button
+                            Button {
+                                if state.percentage > 10 {
+                                    state.percentage -= 1
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .font(.title)
+                                    .foregroundStyle(Color.blue.opacity(0.8))
                             }
-                        ).accentColor(state.percentage >= 130 ? .red : .blue)
-                        Spacer()
+                            .buttonStyle(BorderlessButtonStyle())
+
+                            // The Slider
+                            Slider(
+                                value: $state.percentage,
+                                in: 10 ... max,
+                                step: 1,
+                                onEditingChanged: { editing in
+                                    isEditing = editing
+                                }
+                            )
+                            .accentColor(state.percentage >= 130 ? .red : .blue)
+
+                            // Plus Button
+                            Button {
+                                if state.percentage < max {
+                                    state.percentage += 1
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title)
+                                    .foregroundStyle(state.percentage >= 130 ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                        }
+                        .padding(.bottom, 10)
                     }
                 }
                 header: { Text("Insulin") }
                 footer: {
                     Text(
-                        "Your profile basal insulin will be adjusted with the override percentage and your profile ISF and CR will be inversly adjusted with the percentage."
+                        "Nutze die + und - Buttons für präzise 1%-Schritte oder ziehe den Slider für grobe Anpassungen.\n\nYour profile basal insulin will be adjusted with the override percentage and your profile ISF and CR will be inversly adjusted with the percentage."
                     )
                 }
 
@@ -278,7 +307,7 @@ extension OverrideProfilesConfig {
                             }
                         }
 
-                        // Blank Divider()
+                        // Blank Divider() equivalent
                         HStack {}
 
                         HStack {
@@ -586,46 +615,47 @@ extension OverrideProfilesConfig {
                     } header: { Text("Profile Name") }
                 }
 
-                // Buttons
+                // MARK: - Modern v1 Prominent Action Buttons
+
                 Section {
-                    HStack {
+                    VStack(spacing: 12) {
                         if !isEditingPreset {
-                            Button("Start") {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 showAlert.toggle()
                                 let duration = TimeInterval(state.duration * 60)
                                 alertSring = (formatter.string(from: state.percentage as NSNumber) ?? "100") + "%, " +
                                     (
                                         state.duration > 0 && !state._indefinite ? (
-                                            dateFormatter
-                                                .string(from: duration) ?? ""
-                                        ) :
-                                            NSLocalizedString(" infinite duration.", comment: "")
+                                            dateFormatter.string(from: duration) ?? ""
+                                        ) : NSLocalizedString(" infinite duration.", comment: "")
                                     ) +
                                     (
                                         (state.target == 0 || !state.override_target) ? "" :
                                             (" Target: " + state.target.formatted() + " " + state.units.rawValue + ".")
-                                    )
-                                    +
+                                    ) +
                                     (
-                                        state
-                                            .smbIsOff ?
-                                            NSLocalizedString(
-                                                " SMBs are disabled either by schedule or during the entire duration.",
-                                                comment: ""
-                                            ) : ""
-                                    )
-                                    +
-                                    "\n\n"
-                                    +
+                                        state.smbIsOff ? NSLocalizedString(
+                                            " SMBs are disabled either by schedule or during the entire duration.",
+                                            comment: ""
+                                        ) : ""
+                                    ) +
+                                    "\n\n" +
                                     NSLocalizedString(
                                         "Starting this override will change your Profiles and/or your Target Glucose used for looping during the entire selected duration. Tapping ”Start Profile” will start your new profile or edit your current active profile.",
                                         comment: ""
                                     )
+                            } label: {
+                                Text("Start Profile")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(unChanged() ? Color.gray.opacity(0.3) : Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
                             }
                             .disabled(unChanged())
                             .buttonStyle(BorderlessButtonStyle())
-                            .font(.callout)
-                            .controlSize(.mini)
                         }
 
                         Button {
@@ -635,28 +665,41 @@ extension OverrideProfilesConfig {
                                 save(editThis)
                                 isEditingPreset.toggle()
                             }
+                        } label: {
+                            Text(isEditingPreset ? LocalizedStringKey("Save") : LocalizedStringKey("Save as Profile"))
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(
+                                    isEditingPreset ? Color.orange : (unChanged() ? Color.gray.opacity(0.3) : Color.orange)
+                                )
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
                         }
-                        label: { Text(isEditingPreset ? LocalizedStringKey("Save") : LocalizedStringKey("Save as Profile")) }
-                            .tint(.orange)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .buttonStyle(BorderlessButtonStyle())
-                            .controlSize(.mini)
-                            .disabled(isEditingPreset ? false : unChanged())
+                        .disabled(isEditingPreset ? false : unChanged())
+                        .buttonStyle(BorderlessButtonStyle())
 
                         if state.isEnabled, !isEditingPreset {
-                            Section {
-                                Button("Cancel Profile Override") {
-                                    state.cancelProfile()
-                                    state.hideModal()
-                                }
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .buttonStyle(BorderlessButtonStyle())
-                                .disabled(!state.isEnabled)
-                                .tint(.red)
-                            } footer: { Text("").padding(.bottom, 150) }
+                            Button {
+                                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                                state.cancelProfile()
+                                state.hideModal()
+                            } label: {
+                                Text("Cancel Profile Override")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.red)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
                         }
                     }
                 }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .padding(.vertical, 10)
             }
         }
 
@@ -672,8 +715,7 @@ extension OverrideProfilesConfig {
                         isSheetPresented = false
                     }
                     .disabled(
-                        state.profileName.isEmpty || fetchedProfiles.filter({ $0.name == state.profileName })
-                            .isNotEmpty
+                        state.profileName.isEmpty || fetchedProfiles.filter({ $0.name == state.profileName }).isNotEmpty
                     )
 
                     Button("Cancel") {
@@ -760,7 +802,7 @@ extension OverrideProfilesConfig {
                         }.foregroundStyle(.secondary).font(.caption)
                     }
 
-                    // All of the Auto ISF Settings (Bool and Decimal optionals)
+                    // All of the Auto ISF Settings
                     if preset.overrideAutoISF, let aisf = autoisfSettings, aisf.autoisf {
                         let standard = state.currentSettings
                         HStack {
@@ -771,14 +813,12 @@ extension OverrideProfilesConfig {
 
                             decimal(decimal: aisf.autoisf_min, setting: standard.autoisf_min, label: "Min: ")
                             decimal(decimal: aisf.autoisf_max, setting: standard.autoisf_max, label: "Max: ")
-                        }
-                        .foregroundStyle(.secondary).font(.caption)
+                        }.foregroundStyle(.secondary).font(.caption)
 
                         HStack {
                             percentage(
                                 decimal: aisf.iobThresholdPercent,
-                                setting: standard
-                                    .iobThresholdPercent,
+                                setting: standard.iobThresholdPercent,
                                 label: "SMB IOB: "
                             )
 
@@ -786,9 +826,7 @@ extension OverrideProfilesConfig {
                                 .smbDeliveryRatioMin || ((aisf.smbDeliveryRatioMax ?? 0.5) as Decimal) != standard
                                 .smbDeliveryRatioMax
                             {
-                                Text(
-                                    "SMB ratio: \(aisf.smbDeliveryRatioMin ?? 0.5)-\(aisf.smbDeliveryRatioMax ?? 0.5)"
-                                )
+                                Text("SMB ratio: \(aisf.smbDeliveryRatioMin ?? 0.5)-\(aisf.smbDeliveryRatioMax ?? 0.5)")
                             }
                             glucose(
                                 decimal: aisf.smbDeliveryRatioBGrange,
@@ -798,34 +836,14 @@ extension OverrideProfilesConfig {
                         }.foregroundStyle(.secondary).font(.caption)
 
                         HStack {
-                            decimal(
-                                decimal: aisf.lowerISFrangeWeight,
-                                setting: standard.lowerISFrangeWeight,
-                                label: "low: "
-                            )
-                            decimal(
-                                decimal: aisf.higherISFrangeWeight,
-                                setting: standard.higherISFrangeWeight,
-                                label: "high: "
-                            )
+                            decimal(decimal: aisf.lowerISFrangeWeight, setting: standard.lowerISFrangeWeight, label: "low: ")
+                            decimal(decimal: aisf.higherISFrangeWeight, setting: standard.higherISFrangeWeight, label: "high: ")
 
                             if aisf.enableBGacceleration {
-                                decimal(
-                                    decimal: aisf.bgAccelISFweight,
-                                    setting: standard.bgAccelISFweight,
-                                    label: "accel: "
-                                )
-                                decimal(
-                                    decimal: aisf.bgBrakeISFweight,
-                                    setting: standard.bgBrakeISFweight,
-                                    label: "brake: "
-                                )
+                                decimal(decimal: aisf.bgAccelISFweight, setting: standard.bgAccelISFweight, label: "accel: ")
+                                decimal(decimal: aisf.bgBrakeISFweight, setting: standard.bgBrakeISFweight, label: "brake: ")
                             }
-                            decimal(
-                                decimal: aisf.autoISFhourlyChange,
-                                setting: standard.autoISFhourlyChange,
-                                label: "dura: "
-                            )
+                            decimal(decimal: aisf.autoISFhourlyChange, setting: standard.autoISFhourlyChange, label: "dura: ")
                             decimal(decimal: aisf.postMealISFweight, setting: standard.postMealISFweight, label: "pp: ")
                         }.foregroundStyle(.secondary).font(.caption)
                     }
@@ -859,17 +877,12 @@ extension OverrideProfilesConfig {
 
         private func decimal(decimal: NSDecimalNumber?, setting: Decimal, label: String) -> Text? {
             guard let dec = decimal as? Decimal, round(dec) != round(setting) else { return nil }
-
-            guard label != "pp: " else {
-                return Text(label + (promilleFormatter.string(from: decimal ?? 0) ?? ""))
-            }
-
+            guard label != "pp: " else { return Text(label + (promilleFormatter.string(from: decimal ?? 0) ?? "")) }
             return Text(label + "\(dec)")
         }
 
         private func bool(bool: Bool, setting: Bool, label: String) -> AnyView? {
-            let onOff = bool ? NSLocalizedString(" on", comment: "Is true") :
-                NSLocalizedString(" off", comment: "Is false")
+            let onOff = bool ? NSLocalizedString(" on", comment: "Is true") : NSLocalizedString(" off", comment: "Is false")
             if bool != setting {
                 return Text(label + onOff).foregroundStyle(.white).boolTag(bool).asAny()
             }
@@ -894,7 +907,6 @@ extension OverrideProfilesConfig {
             return nil
         }
 
-        /// Round to two fraction digits
         private func round(_ decimal: Decimal) -> Decimal {
             decimal.rounded(to: 2)
         }
@@ -904,16 +916,11 @@ extension OverrideProfilesConfig {
                 let preset = fetchedProfiles[index]
                 moc.delete(preset)
             }
-            do {
-                try moc.save()
-            } catch {
-                debug(.apsManager, "Couldn't profile preset at \(offsets).")
-            }
+            do { try moc.save() } catch { debug(.apsManager, "Couldn't profile preset at \(offsets).") }
         }
 
         private func save(_ preset: OverridePresets) {
             let saveOverride = preset
-
             saveOverride.duration = state.duration as NSDecimalNumber
             saveOverride.indefinite = state._indefinite
             saveOverride.percentage = state.percentage.rounded()
@@ -921,12 +928,9 @@ extension OverrideProfilesConfig {
             saveOverride.name = state.profileName
             saveOverride.emoji = state.emoji
             saveOverride.overrideAutoISF = state.overrideAutoISF
+
             if state.override_target {
-                saveOverride.target = (
-                    state.units == .mmolL
-                        ? state.target.asMgdL
-                        : state.target
-                ) as NSDecimalNumber
+                saveOverride.target = (state.units == .mmolL ? state.target.asMgdL : state.target) as NSDecimalNumber
             } else { saveOverride.target = 6 }
 
             saveOverride.advancedSettings = state.advancedSettings
@@ -965,15 +969,8 @@ extension OverrideProfilesConfig {
 
             saveOverride.date = Date.now
 
-            if state.overrideAutoISF {
-                state.updateAutoISF(preset.id)
-            }
-
-            do {
-                try moc.save()
-            } catch {
-                debug(.apsManager, "Failed to save \(moc.updatedObjects)")
-            }
+            if state.overrideAutoISF { state.updateAutoISF(preset.id) }
+            do { try moc.save() } catch { debug(.apsManager, "Failed to save \(moc.updatedObjects)") }
         }
     }
 }

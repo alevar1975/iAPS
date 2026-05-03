@@ -510,13 +510,19 @@ private struct APIKeyRow: View {
                 }
                 .buttonStyle(.plain)
             }
-            StableSecureField(placeholder: NSLocalizedString(placeholder, comment: ""), text: $text, isSecure: !isVisible)
+            StableSecureField(
+                title: "Passwort", // oder ein anderer Name für das Feld
+                placeholder: NSLocalizedString("Passwort eingeben", comment: ""),
+                text: $text,
+                isSecure: !isVisible
+            )
         }
         .padding(.vertical, 2)
     }
 }
 
-private struct StableSecureField: View {
+struct StableSecureField: View {
+    let title: String
     let placeholder: String
     @Binding var text: String
     let isSecure: Bool
@@ -524,14 +530,8 @@ private struct StableSecureField: View {
     var body: some View {
         if isSecure {
             SecureField(placeholder, text: $text)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
         } else {
             TextField(placeholder, text: $text)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
         }
     }
 }

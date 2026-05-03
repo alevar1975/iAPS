@@ -120,8 +120,8 @@ final class OpenAPS {
 
                     now = Date.now
                     // Auto ISF Layer
-                    if let freeAPSSettings = settings,
-                       (freeAPSSettings.autoisf && self.notDisabled(override: override)) || self.aisfEnabled(override: override)
+                    if let freeAPSSettings = settings, freeAPSSettings.autoisf || self.autoISF(override: override),
+                       self.notDisabled(override: override)
                     {
                         now = Date.now
                         profile = await self.autosisf(
@@ -384,18 +384,18 @@ final class OpenAPS {
 
     // MARK: - Private
 
-    private func aisfEnabled(override: Override?) -> Bool {
+    private func autoISF(override: Override?) -> Bool {
         guard let current = override, current.enabled else { return false }
-        guard current.overrideAutoISF, let settings = OverrideStorage().fetchAutoISFsetting(id: current.id ?? ""),
+        guard current.overrideAutoISF, let settings = OverrideStorage().fetchLatestAutoISFsettings().first,
               settings.autoisf else { return false }
         return true
     }
 
     private func notDisabled(override: Override?) -> Bool {
         guard let current = override, current.enabled else { return true }
-        guard current.overrideAutoISF, let settings = OverrideStorage().fetchAutoISFsetting(id: current.id ?? ""),
-              !settings.autoisf else { return true }
-        return false
+        guard current.overrideAutoISF, let settings = OverrideStorage().fetchLatestAutoISFsettings().first,
+              settings.autoisf else { return true }
+        return true
     }
 
     private func pumpHistory() async -> RawJSON {
@@ -497,8 +497,8 @@ final class OpenAPS {
                 tddString = ", Insulin 24h: \(round) U, \(bolus) % Bolus"
             }
             // Auto ISF
-            if let freeAPSSettings = settings,
-               (freeAPSSettings.autoisf && notDisabled(override: override)) || aisfEnabled(override: override)
+            if let freeAPSSettings = settings, freeAPSSettings.autoisf,
+               self.notDisabled(override: override) || autoISF(override: override)
             {
                 let reasons = profile.autoISFreasons ?? ""
                 // If disabled in middleware or Auto ISF layer
@@ -1276,40 +1276,6 @@ final class OpenAPS {
         )
     }
 
-    private func makeProfileAsync(
-        preferences: JSON,
-        pumpSettings: JSON,
-        bgTargets: JSON,
-        basalProfile: JSON,
-        isf: JSON,
-        carbRatio: JSON,
-        tempTargets: JSON,
-        model: JSON,
-        autotune: JSON,
-        freeaps: JSON,
-        dynamicVariables: JSON,
-        settings: JSON
-    ) async -> RawJSON {
-        // dispatchPrecondition(condition: .onQueue(processQueue))
-        await scriptExecutor.call(
-            name: OpenAPS.Prepare.profile,
-            with: [
-                pumpSettings,
-                bgTargets,
-                isf,
-                basalProfile,
-                preferences,
-                carbRatio,
-                tempTargets,
-                model,
-                autotune,
-                freeaps,
-                dynamicVariables,
-                settings
-            ]
-        )
-    }
-
     private func middleware(
         glucose: JSON,
         currentTemp: JSON,
@@ -1349,6 +1315,8 @@ final class OpenAPS {
         autosens: JSON,
         pumpHistory: JSON
     ) async -> RawJSON {
+        // dispatchPrecondition(condition: .onQueue(processQueue))
+
         await scriptExecutor.call(
             name: OpenAPS.AutoISF.autoisf,
             with: [

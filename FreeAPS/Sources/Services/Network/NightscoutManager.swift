@@ -25,6 +25,7 @@ protocol NightscoutManager {
     func deleteOverride()
     func editOverride(_ profile: String, _ duration_: Double, _ date: Date)
     func fetchVersion()
+    func forceUploadAllMacros() // 🟢 NEU: Deine Funktion ins Protokoll aufgenommen
 }
 
 final class BaseNightscoutManager: NightscoutManager, Injectable {
@@ -303,10 +304,6 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
             })
             .eraseToAnyPublisher()
     }
-
-//    var glucoseManager: FetchGlucoseManager?
-//    var cgmManager: CGMManagerUI?
-//    var cgmType: CGMType = .nightscout
 
     func fetchCarbs() -> AnyPublisher<[CarbsEntry], Never> {
         guard let nightscout = nightscoutAPI, isNetworkReachable else {
@@ -1072,6 +1069,49 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
                 progress: progress
             )
         }
+    }
+
+    // 🟢 NEU: Deine Funktion aus v1!
+    func forceUploadAllMacros() {
+        // 1. Hole alle Daten aus der tiefen CoreData-Datenbank (bis zu 93 Tage)
+        let cutoff = Calendar.current.date(byAdding: .day, value: -93, to: Date()) ?? Date()
+        let oldMeals = CoreDataStorage().fetchMealData(interval: cutoff as NSDate)
+
+        // 2. Wandle sie in Nightscout-Pakete um
+        let treatments = oldMeals.compactMap { meal -> NigtscoutTreatment? in
+            guard let date = meal.date else { return nil }
+
+            // Nur hochladen, wenn überhaupt KH, Fett oder Protein da sind
+            let c = meal.carbs?.decimalValue ?? 0
+            let f = meal.fat?.decimalValue ?? 0
+            let p = meal.protein?.decimalValue ?? 0
+            guard c > 0 || f > 0 || p > 0 else { return nil }
+
+            return NigtscoutTreatment(
+                duration: nil,
+                rawDuration: nil,
+                rawRate: nil,
+                absolute: nil,
+                rate: nil,
+                eventType: .nsCarbCorrection,
+                createdAt: date,
+                enteredBy: "iAPS-History",
+                bolus: nil,
+                insulin: nil,
+                carbs: c,
+                fat: f > 0 ? f : nil,
+                protein: p > 0 ? p : nil,
+                foodType: meal.note,
+                targetTop: nil,
+                targetBottom: nil,
+                id: meal.id ?? UUID().uuidString,
+                fpuID: nil,
+                creation_date: date
+            )
+        }
+
+        // 3. Pushe das komplette Paket an Nightscout
+        uploadTreatments(treatments, fileToSave: OpenAPS.Nightscout.uploadedCarbs)
     }
 
     private func uploadGlucose(bloodGlucose: [BloodGlucose]) {

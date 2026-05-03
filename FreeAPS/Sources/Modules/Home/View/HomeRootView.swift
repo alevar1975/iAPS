@@ -5,6 +5,114 @@ import SwiftDate
 import SwiftUI
 import Swinject
 
+// 🟢 NEU: Ultra-Runde Karten (Corner Radius 40)
+struct ModerniPhone17CardStyle: ViewModifier {
+    @Environment(\.colorScheme) var colorScheme
+    @State private var isBreathing = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, 14)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 40, style: .continuous)
+                        .fill(colorScheme == .dark ? Color(red: 0.05, green: 0.08, blue: 0.16) : Color.white.opacity(0.8))
+                        .background(colorScheme == .dark ? Material.regular : Material.ultraThin)
+
+                    RoundedRectangle(cornerRadius: 40, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.blue.opacity(colorScheme == .dark ? (isBreathing ? 0.18 : 0.05) : 0.05),
+                                    Color.purple.opacity(colorScheme == .dark ? (isBreathing ? 0.10 : 0.02) : 0.02),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .animation(.easeInOut(duration: 4.0).repeatForever(autoreverses: true), value: isBreathing)
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 40, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.25 : 0.8),
+                                .clear,
+                                .white.opacity(colorScheme == .dark ? 0.08 : 0.3)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+                    .blendMode(colorScheme == .dark ? .plusLighter : .normal)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.4 : 0.08), radius: 8, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.5 : 0.1), radius: 30, x: 0, y: 15)
+            .onAppear { isBreathing = true }
+    }
+}
+
+// 🟢 NEU: Ultra-Runde Full-Width-Karte
+struct ModerniPhone17FullWidthStyle: ViewModifier {
+    @Environment(\.colorScheme) var colorScheme
+    @State private var isBreathing = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, 16)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 40, style: .continuous)
+                        .fill(colorScheme == .dark ? Color(red: 0.05, green: 0.08, blue: 0.16) : Color.white.opacity(0.8))
+                        .background(colorScheme == .dark ? Material.regular : Material.ultraThin)
+
+                    RoundedRectangle(cornerRadius: 40, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.blue.opacity(colorScheme == .dark ? (isBreathing ? 0.15 : 0.05) : 0.05),
+                                    Color.indigo.opacity(colorScheme == .dark ? (isBreathing ? 0.10 : 0.02) : 0.02),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .animation(.easeInOut(duration: 5.0).repeatForever(autoreverses: true), value: isBreathing)
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 40, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.15 : 0.5),
+                                .clear,
+                                .white.opacity(colorScheme == .dark ? 0.05 : 0.2)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+                    .blendMode(colorScheme == .dark ? .plusLighter : .normal)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.4 : 0.08), radius: 8, x: 0, y: 4)
+            .onAppear { isBreathing = true }
+    }
+}
+
+extension View {
+    func modernCard() -> some View { modifier(ModerniPhone17CardStyle()) }
+    func modernFullWidth() -> some View { modifier(ModerniPhone17FullWidthStyle()) }
+}
+
 extension Home {
     struct RootView: BaseView {
         let resolver: Resolver
@@ -21,8 +129,12 @@ extension Home {
         @State var showBolusActiveAlert = false
         @State var displayAutoHistory = false
         @State var displayDynamicHistory = false
+        @State private var isMealsHistoryPresented = false
 
-        let buttonFont = Font.custom("TimeButtonFont", size: 14)
+        @State private var animateUI = false
+        @State private var floatDock = false
+
+        let buttonFont = Font.system(size: 14, weight: .medium, design: .rounded)
         let viewPadding: CGFloat = 5
 
         @Environment(\.managedObjectContext) var moc
@@ -213,14 +325,30 @@ extension Home {
         var info: some View {
             HStack(spacing: 10) {
                 ZStack {
-                    HStack {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         if state.pumpSuspended {
                             Text("Pump suspended")
-                                .font(.extraSmall).bold().foregroundColor(.loopGray)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundColor(.loopGray)
                         } else {
                             Text(tempBasalString)
-                                .font(.statusFont).bold()
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
                                 .foregroundColor(.insulin)
+
+                            if let currentRate = state.tempRate,
+                               let lastTemp = state.data.tempBasals.reversed().first(where: { ($0.rate ?? 0) != currentRate }),
+                               let oldRate = lastTemp.rate
+                            {
+                                let oldRateString = numberFormatter.string(from: oldRate as NSNumber) ?? "0"
+                                HStack(spacing: 2) {
+                                    Image(systemName: "arrow.uturn.backward")
+                                        .font(.system(size: 10, weight: .bold))
+                                    Text("\(oldRateString)")
+                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                }
+                                .foregroundColor(colorScheme == .dark ? .white.opacity(0.5) : .black.opacity(0.5))
+                                .padding(.leading, 2)
+                            }
                         }
                     }
                 }
@@ -229,7 +357,7 @@ extension Home {
 
                 if let tempTargetString = tempTargetString, !(fetchedPercent.first?.enabled ?? false) {
                     Text(tempTargetString)
-                        .font(.buttonFont)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundColor(.secondary)
                 } else {
                     profileView
@@ -237,18 +365,19 @@ extension Home {
 
                 ZStack {
                     HStack {
-                        Text("⇢").font(.statusFont).foregroundStyle(.secondary)
+                        Text("⇢").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.secondary)
 
                         if let eventualBG = state.eventualBG {
                             Text(
                                 fetchedTargetFormatter.string(
                                     from: (state.data.units == .mmolL ? eventualBG.asMmolL : Decimal(eventualBG)) as NSNumber
                                 ) ?? ""
-                            ).font(.statusFont).foregroundColor(colorScheme == .dark ? .white : .black)
+                            ).font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(colorScheme == .dark ? .white : .black)
                         } else {
-                            Text("?").font(.statusFont).foregroundStyle(.secondary)
+                            Text("?").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.secondary)
                         }
-                        Text(state.data.units.rawValue).font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(state.data.units.rawValue).font(.system(size: 12, design: .rounded)).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .padding(.trailing, 8)
@@ -257,11 +386,11 @@ extension Home {
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
 
-        var infoPanel: some View {
-            info.frame(height: 26)
-                .background {
-                    InfoPanelBackground(colorScheme: colorScheme)
-                }
+        var infoPanelView: some View {
+            HStack { info }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .modernCard()
         }
 
         var mainChart: some View {
@@ -277,171 +406,186 @@ extension Home {
             .modal(for: .dataTable, from: self)
         }
 
-        @ViewBuilder private func buttonPanel(_ geo: GeometryProxy) -> some View {
-            ZStack {
-                addHeaderBackground()
-                    .frame(height: 50 + geo.safeAreaInsets.bottom)
-                let isOverride = fetchedPercent.first?.enabled ?? false
-                let isTarget = (state.tempTarget != nil)
-                VStack {
-                    Divider()
-                    HStack {
-                        if state.carbButton {
-                            Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .meal)) }
-                            label: {
-                                ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
-                                    Image(systemName: "fork.knife")
-                                        .renderingMode(.template)
-                                        .font(.custom("Buttons", size: 24))
-                                        .foregroundStyle(colorScheme == .dark ? .loopYellow : .orange)
-                                        .padding(8)
-                                    if let carbsReq = state.carbsRequired {
-                                        Text(numberFormatter.string(from: carbsReq as NSNumber)!)
-                                            .font(.caption)
-                                            .foregroundStyle(.white)
-                                            .padding(4)
-                                            .background(Capsule().fill(Color.red))
-                                    }
-                                }
+        // --- 1. AUSGELAGERTE BUTTONS FÜR DAS PANEL ---
+        private var carbActionBtn: some View {
+            Group {
+                if state.carbButton {
+                    Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .meal)) }
+                    label: {
+                        ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
+                            Image(systemName: "fork.knife")
+                                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                                .foregroundStyle(colorScheme == .dark ? .loopYellow : .orange)
+                                .padding(12)
+
+                            if let carbsReq = state.carbsRequired {
+                                Text(numberFormatter.string(from: carbsReq as NSNumber)!)
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.red))
+                                    .offset(x: -4, y: -4)
                             }
-                            .contextMenu {
-                                Button {
-                                    state.showModal(for: .addCarbs(editMode: false, override: false, mode: .presets)) }
-                                label: { Label("Meal Presets", systemImage: "menucard")
-                                }
-                                Button {
-                                    state.showModal(for: .addCarbs(editMode: false, override: false, mode: .barcode)) }
-                                label: { Label("Barcode", systemImage: "barcode.viewfinder")
-                                }
-                                if state.ai {
-                                    Button {
-                                        state.showModal(for: .addCarbs(editMode: false, override: false, mode: .image)) }
-                                    label: { Label("AI Image Analysis", systemImage: "photo.badge.magnifyingglass")
-                                    }
-                                }
-                                Button {
-                                    state.showModal(for: .addCarbs(editMode: false, override: false, mode: .meal)) }
-                                label: { Label("Add Meal", systemImage: "birthday.cake")
-                                }
-                            }
-                            Spacer()
                         }
-                        Button {
-                            (state.bolusProgress != nil) ? showBolusActiveAlert = true :
-                                state.showModal(for: .bolus(
-                                    waitForSuggestion: state.useCalc ? true : false,
-                                    fetch: false
-                                ))
-                        }
-                        label: {
-                            Image(systemName: "syringe")
-                                .renderingMode(.template)
-                                .font(.custom("Buttons", size: 24))
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.insulin)
-                        Spacer()
-                        if state.allowManualTemp {
-                            Button { state.showModal(for: .manualTempBasal) }
-                            label: {
-                                Image("bolus1")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .frame(width: IAPSconfig.buttonSize, height: IAPSconfig.buttonSize, alignment: .bottom)
-                            }
-                            .foregroundStyle(.insulin)
-                            Spacer()
-                        }
-                        if state.profileButton {
-                            ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
-                                Image(systemName: isOverride ? "person.fill" : "person")
-                                    .symbolRenderingMode(.palette)
-                                    .font(.custom("Buttons", size: 28))
-                                    .foregroundStyle(.purple)
-                                    .padding(8)
-                                    .background(isOverride ? .purple.opacity(0.15) : .clear)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .onTapGesture {
-                                if isOverride {
-                                    showCancelAlert.toggle()
-                                } else {
-                                    state.showModal(for: .overrideProfilesConfig)
-                                }
-                            }
-                            .onLongPressGesture {
-                                state.showModal(for: .overrideProfilesConfig)
-                            }
-                            Spacer()
-                        }
-                        if state.useTargetButton {
-                            Image(systemName: "target")
-                                .renderingMode(.template)
-                                .font(.custom("Buttons", size: 24))
-                                .padding(8)
-                                .foregroundStyle(.loopGreen)
-                                .background(isTarget ? .green.opacity(0.15) : .clear)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .onTapGesture {
-                                    if isTarget {
-                                        showCancelTTAlert.toggle()
-                                    } else {
-                                        state.showModal(for: .addTempTarget)
-                                    }
-                                }
-                                .onLongPressGesture {
-                                    state.showModal(for: .addTempTarget)
-                                }
-                            Spacer()
-                        }
-                        Button { state.showModal(for: .settings) }
-                        label: {
-                            Image(systemName: "gear")
-                                .renderingMode(.template)
-                                .font(.custom("Buttons", size: 24))
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.gray)
                     }
-                    .padding(.horizontal, state.allowManualTemp ? 10 : 24)
-                    .padding(.bottom, geo.safeAreaInsets.bottom)
+                    .contextMenu {
+                        Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .presets)) } label: {
+                            Label("Meal Presets", systemImage: "menucard") }
+                        Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .search)) } label: {
+                            Label("Search", systemImage: "network") }
+                        Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .barcode)) } label: {
+                            Label("Barcode", systemImage: "barcode.viewfinder") }
+                        Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .image)) } label: {
+                            Label("AI Image Analysis", systemImage: "photo.badge.magnifyingglass") }
+                        Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .meal)) } label: {
+                            Label("Add Meal", systemImage: "birthday.cake") }
+                    }
+                    Spacer()
                 }
             }
-            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-            .confirmationDialog("Cancel Profile Override", isPresented: $showCancelAlert) {
-                Button("Cancel Profile Override", role: .destructive) {
-                    state.cancelProfile()
-                    triggerUpdate.toggle()
+        }
+
+        private var bolusActionBtn: some View {
+            Group {
+                Button {
+                    (state.bolusProgress != nil) ? showBolusActiveAlert = true :
+                        state.showModal(for: .bolus(waitForSuggestion: state.useCalc ? true : false, fetch: false))
+                }
+                label: {
+                    Image(systemName: "syringe")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.insulin)
+                        .padding(12)
+                }
+                Spacer()
+            }
+        }
+
+        private var manualTempActionBtn: some View {
+            Group {
+                if state.allowManualTemp {
+                    Button { state.showModal(for: .manualTempBasal) }
+                    label: {
+                        Image("bolus1")
+                            .renderingMode(.template)
+                            .resizable()
+                            .frame(width: 24, height: 24)
+                            .padding(12)
+                    }
+                    .foregroundStyle(.insulin)
+                    Spacer()
                 }
             }
-            .confirmationDialog("Cancel Temporary Target", isPresented: $showCancelTTAlert) {
-                Button("Cancel Temporary Target", role: .destructive) {
-                    state.cancelTempTarget()
+        }
+
+        private var profileActionBtn: some View {
+            Group {
+                if state.profileButton {
+                    let isOverride = fetchedPercent.first?.enabled ?? false
+                    Button {
+                        if isOverride { showCancelAlert.toggle() }
+                        else { state.showModal(for: .overrideProfilesConfig) }
+                    } label: {
+                        Image(systemName: isOverride ? "person.fill" : "person")
+                            .font(.system(size: 22, weight: .semibold, design: .rounded))
+                            .foregroundStyle(isOverride ? .white : .purple)
+                            .padding(12)
+                            .background(isOverride ? Color.purple : Color.clear)
+                            .clipShape(Circle())
+                    }
+                    .onLongPressGesture {
+                        state.showModal(for: .overrideProfilesConfig)
+                    }
+                    Spacer()
                 }
             }
-            .confirmationDialog("Bolus already in Progress", isPresented: $showBolusActiveAlert) {
-                Button("Bolus already in Progress!", role: .destructive) {
-                    showBolusActiveAlert = false
+        }
+
+        private var targetActionBtn: some View {
+            Group {
+                if state.useTargetButton {
+                    let isTarget = (state.tempTarget != nil)
+                    Button {
+                        if isTarget { showCancelTTAlert.toggle() }
+                        else { state.showModal(for: .addTempTarget) }
+                    } label: {
+                        Image(systemName: "target")
+                            .font(.system(size: 22, weight: .semibold, design: .rounded))
+                            .foregroundStyle(isTarget ? .white : .loopGreen)
+                            .padding(12)
+                            .background(isTarget ? Color.loopGreen : Color.clear)
+                            .clipShape(Circle())
+                    }
+                    .onLongPressGesture {
+                        state.showModal(for: .addTempTarget)
+                    }
+                    Spacer()
                 }
             }
+        }
+
+        private var settingsActionBtn: some View {
+            Button { state.showModal(for: .settings) }
+            label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.gray)
+                    .padding(12)
+            }
+        }
+
+        @ViewBuilder private func buttonPanel(_ geo: GeometryProxy) -> some View {
+            HStack(spacing: 0) {
+                carbActionBtn
+                bolusActionBtn
+                manualTempActionBtn
+                profileActionBtn
+                targetActionBtn
+                settingsActionBtn
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(
+                        colorScheme == .dark ? Color(red: 0.08, green: 0.12, blue: 0.22).opacity(0.8) : Color.white
+                            .opacity(0.7)
+                    )
+                    .background(.ultraThinMaterial)
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.3), .clear, .white.opacity(0.1)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+            )
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.6 : 0.15), radius: 15, x: 0, y: 8)
+            .padding(.horizontal, 24)
+            .padding(.bottom, geo.safeAreaInsets.bottom > 0 ? geo.safeAreaInsets.bottom / 2 : 16)
+            .offset(y: floatDock ? -3 : 3)
+            .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: floatDock)
+            .onAppear { floatDock = true }
         }
 
         var chart: some View {
             let ratio = 1.96
             let ratio2 = 2.0
 
-            return addColouredBackground().shadow(radius: 3, y: 3)
-                .overlay {
-                    mainChart
-                }
+            return mainChart
                 .frame(minHeight: UIScreen.main.bounds.height / (fontSize < .extraExtraLarge ? ratio : ratio2))
+                .padding(.horizontal, 16)
+                .modernCard()
         }
 
         var carbsAndInsulinView: some View {
             HStack {
-                // A temporary ugly(?) workaround for displaying last real IOB and COB computation
                 let opacity: CGFloat = colorScheme == .dark ? 0.2 : 0.65
                 let materialOpacity: CGFloat = colorScheme == .dark ? 0.25 : 0.10
+
                 // Carbs on Board
                 HStack {
                     let substance = Double(state.data.suggestion?.cob ?? 0)
@@ -459,15 +603,16 @@ extension Home {
                     HStack(spacing: 0) {
                         if let loop = state.data.suggestion, let cob = loop.cob {
                             Text(numberFormatter.string(from: cob as NSNumber) ?? "0")
-                                .font(.statusFont).bold()
-                            // Display last loop, unless very old
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                         } else {
-                            Text("?").font(.statusFont).bold()
+                            Text("?").font(.system(size: 14, weight: .bold, design: .rounded))
                         }
-                        Text(NSLocalizedString(" g", comment: "gram of carbs")).font(.statusFont).foregroundStyle(.secondary)
+                        Text(NSLocalizedString(" g", comment: "gram of carbs"))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
                     }.offset(y: 5)
                 }
-                // Instead of Spacer
+
                 Text(" ")
 
                 // Insulin on Board
@@ -486,129 +631,244 @@ extension Home {
                     .offset(y: -5)
                     HStack(spacing: 0) {
                         if let iob = state.data.iob {
-                            Text(
-                                targetFormatter.string(from: iob as NSNumber) ?? "0"
-                            ).font(.statusFont).bold()
+                            Text(targetFormatter.string(from: iob as NSNumber) ?? "0")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                         } else {
-                            Text("?").font(.statusFont).bold()
+                            Text("?").font(.system(size: 14, weight: .bold, design: .rounded))
                         }
-                        Text(NSLocalizedString(" U", comment: "Insulin unit")).font(.statusFont).foregroundStyle(.secondary)
+                        Text(NSLocalizedString(" U", comment: "Insulin unit"))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
                     }.offset(y: 5)
                 }
             }.offset(x: 5, y: 5)
         }
 
         var preview: some View {
-            addBackground()
-                .frame(minHeight: 200)
-                .overlay {
-                    PreviewChart(
-                        readings: $state.readings,
-                        lowLimit: $state.data.lowGlucose,
-                        highLimit: $state.data.highGlucose
-                    )
+            ZStack {
+                PreviewChart(
+                    readings: $state.readings,
+                    lowLimit: $state.data.lowGlucose,
+                    highLimit: $state.data.highGlucose
+                )
+            }
+            .frame(minHeight: 200)
+            .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+            .padding(.horizontal, 16)
+            .modernCard()
+            .blur(radius: animateTIRView ? 2 : 0)
+            .onTapGesture {
+                timeIsNowTIR()
+                state.showModal(for: .statistics)
+            }
+            .overlay {
+                if animateTIRView {
+                    animation.asAny()
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .addShadows()
-                .padding(.horizontal, 10)
-                .blur(radius: animateTIRView ? 2 : 0)
-                .onTapGesture {
-                    timeIsNowTIR()
-                    state.showModal(for: .statistics)
-                }
-                .overlay {
-                    if animateTIRView {
-                        animation.asAny()
-                    }
-                }
-        }
-
-        var infoPanelView: some View {
-            addBackground()
-                .frame(height: 30)
-                .overlay {
-                    HStack {
-                        info
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .addShadows()
-                .padding(.horizontal, 10)
+            }
         }
 
         var activeIOBView: some View {
-            addBackground()
+            ActiveIOBView(data: $state.iobData)
                 .frame(minHeight: 190)
-                .overlay {
-                    ActiveIOBView(
-                        data: $state.iobData,
-                    )
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .addShadows()
-                .padding(.horizontal, 10)
+                .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+                .padding(.horizontal, 16)
+                .modernCard()
         }
 
         var activeCOBView: some View {
-            addBackground()
+            ActiveCOBView(data: $state.iobData)
                 .frame(minHeight: 190)
-                .overlay {
-                    ActiveCOBView(data: $state.iobData)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .addShadows()
-                .padding(.horizontal, 10)
+                .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+                .padding(.horizontal, 16)
+                .modernCard()
         }
 
         var insulinView: some View {
-            addBackground()
-                .frame(minHeight: 280)
-                .overlay {
-                    InsulinSummaryView(
-                        neg: $state.neg,
-                        tddChange: $state.tddChange,
-                        tddAverage: $state.tddAverage,
-                        tddYesterday: $state.tddYesterday,
-                        tdd2DaysAgo: $state.tdd2DaysAgo,
-                        tdd3DaysAgo: $state.tdd3DaysAgo,
-                        tddActualAverage: $state.tddActualAverage
-                    )
+            VStack(alignment: .leading, spacing: 10) {
+                InsulinSummaryView(
+                    neg: $state.neg,
+                    tddChange: $state.tddChange,
+                    tddAverage: $state.tddAverage,
+                    tddYesterday: $state.tddYesterday,
+                    tdd2DaysAgo: $state.tdd2DaysAgo,
+                    tdd3DaysAgo: $state.tdd3DaysAgo,
+                    tddActualAverage: $state.tddActualAverage
+                )
+
+                if state.tddYesterday > 0 || state.tddAverage > 0 {
+                    Chart {
+                        if state.tdd3DaysAgo > 0 {
+                            BarMark(x: .value("Tag", "Vor 3"), y: .value("IE", state.tdd3DaysAgo))
+                                .foregroundStyle(LinearGradient(
+                                    colors: [Color.cyan, Color.blue],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                .cornerRadius(100)
+                        }
+                        if state.tdd2DaysAgo > 0 {
+                            BarMark(x: .value("Tag", "Vor 2"), y: .value("IE", state.tdd2DaysAgo))
+                                .foregroundStyle(LinearGradient(
+                                    colors: [Color.cyan, Color.blue],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                .cornerRadius(100)
+                        }
+                        if state.tddYesterday > 0 {
+                            BarMark(x: .value("Tag", "Gestern"), y: .value("IE", state.tddYesterday))
+                                .foregroundStyle(LinearGradient(
+                                    colors: [Color.cyan, Color.blue],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                .cornerRadius(100)
+                        }
+
+                        let avg = state.tddActualAverage > 0 ? state.tddActualAverage : state.tddAverage
+                        if avg > 0 {
+                            RuleMark(y: .value("Ø", avg))
+                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [4]))
+                                .foregroundStyle(Color.green)
+                                .annotation(position: .top, alignment: .trailing) {
+                                    Text("Ø").font(.system(size: 10, weight: .bold, design: .rounded)).foregroundColor(.green)
+                                }
+                        }
+                    }
+                    .frame(height: 120)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 12)
+                    .chartYAxis { AxisMarks(position: .leading) }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .addShadows()
-                .padding(.horizontal, 10)
+            }
+            .frame(minHeight: 280)
+            .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+            .padding(.horizontal, 16)
+            .modernCard()
         }
 
         var mealsView: some View {
-            addBackground()
+            MealsCardContainerView(todayData: $state.mealData)
                 .frame(minHeight: 190)
-                .overlay {
-                    MealsSummaryView(data: $state.mealData)
+                .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+                .padding(.horizontal, 16)
+                .modernCard()
+                .onTapGesture {
+                    isMealsHistoryPresented = true
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .addShadows()
-                .padding(.horizontal, 10)
+                .sheet(isPresented: $isMealsHistoryPresented) {
+                    MealsHistorySheet()
+                }
         }
 
         var loopPreview: some View {
-            addBackground()
-                .frame(minHeight: 160)
-                .overlay {
-                    LoopsView(loopStatistics: $state.loopStatistics)
+            let successLoops = state.loopStatistics.0
+            let totalReadings = state.loopStatistics.1
+            let successRate = state.loopStatistics.2
+            let avgIntervalString = state.loopStatistics.3
+
+            let fillFraction = totalReadings > 0 ? CGFloat(successLoops) / CGFloat(totalReadings) : 0.0
+
+            let (ringGradient, iconColor) = {
+                if successRate >= 85 {
+                    return (
+                        LinearGradient(
+                            colors: [Color(red: 0.3, green: 1.0, blue: 0.4), Color(red: 0.0, green: 0.8, blue: 0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        Color(red: 0.1, green: 0.9, blue: 0.3)
+                    )
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .addShadows()
-                .padding(.horizontal, 10)
-                .blur(radius: animateLoopView ? 2.5 : 0)
-                .onTapGesture {
-                    timeIsNowLoop()
-                    state.showModal(for: .statistics)
+                if successRate >= 70 {
+                    return (
+                        LinearGradient(colors: [Color.yellow, Color.orange], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        Color.orange
+                    )
                 }
-                .overlay {
-                    if animateLoopView {
-                        animation.asAny()
+                return (
+                    LinearGradient(colors: [Color.pink, Color.red], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    Color.red
+                )
+            }()
+
+            return HStack(spacing: 24) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.2), lineWidth: 14)
+
+                    Circle()
+                        .trim(from: 0.0, to: fillFraction)
+                        .stroke(
+                            ringGradient,
+                            style: StrokeStyle(lineWidth: 14, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .shadow(color: iconColor.opacity(0.6), radius: 8, x: 0, y: 0)
+
+                    VStack(spacing: -2) {
+                        Text(String(format: "%.0f", successRate))
+                            .font(.system(size: 20, weight: .black, design: .rounded))
+                            .foregroundColor(.primary)
+                        Text("%")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(.secondary)
                     }
                 }
+                .frame(width: 85, height: 85)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "timer")
+                            .foregroundColor(iconColor)
+                            .font(.system(size: 16, weight: .bold))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Intervall (Ø)")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(.secondary)
+                            Text("\(avgIntervalString)")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                        }
+                    }
+
+                    Divider().background(Color.gray.opacity(0.3))
+
+                    HStack(spacing: 24) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Loops")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(.secondary)
+                            Text("\(successLoops)")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                        }
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Lesungen")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(.secondary)
+                            Text("\(totalReadings)")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(minHeight: 160)
+            .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+            .modernFullWidth()
+            .blur(radius: animateLoopView ? 2.5 : 0)
+            .onTapGesture {
+                timeIsNowLoop()
+                state.showModal(for: .statistics)
+            }
+            .overlay {
+                if animateLoopView {
+                    animation.asAny()
+                }
+            }
         }
 
         var profileView: some View {
@@ -623,25 +883,29 @@ extension Home {
                                 {
                                     if name.count > 15 {
                                         let shortened = name.prefix(15)
-                                        Text(shortened).font(.statusFont).foregroundStyle(.secondary)
+                                        Text(shortened).font(.system(size: 14, weight: .medium, design: .rounded))
+                                            .foregroundStyle(.secondary)
                                     } else {
-                                        Text(name).font(.statusFont).foregroundStyle(.secondary)
+                                        Text(name).font(.system(size: 14, weight: .medium, design: .rounded))
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
-                            } else { Text("📉") } // Hypo Treatment is not actually a preset
+                            } else { Text("📉") }
                         } else if override.percentage != 100 {
-                            Text((tirFormatter.string(from: override.percentage as NSNumber) ?? "") + " %").font(.statusFont)
+                            Text((tirFormatter.string(from: override.percentage as NSNumber) ?? "") + " %")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
                                 .foregroundStyle(.secondary)
                         } else if override.smbIsOff, !override.smbIsAlwaysOff {
-                            Text("No ").font(.statusFont).foregroundStyle(.secondary) // "No" as in no SMBs
+                            Text("No ").font(.system(size: 14, weight: .medium, design: .rounded)).foregroundStyle(.secondary)
                             Image(systemName: "syringe")
-                                .font(.previewNormal).foregroundStyle(.secondary)
+                                .font(.system(size: 14)).foregroundStyle(.secondary)
                         } else if override.smbIsOff {
-                            Image(systemName: "clock").font(.statusFont).foregroundStyle(.secondary)
+                            Image(systemName: "clock").font(.system(size: 14)).foregroundStyle(.secondary)
                             Image(systemName: "syringe")
-                                .font(.previewNormal).foregroundStyle(.secondary)
+                                .font(.system(size: 14)).foregroundStyle(.secondary)
                         } else {
-                            Text("Override").font(.statusFont).foregroundStyle(.secondary)
+                            Text("Override").font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -658,14 +922,14 @@ extension Home {
                             bolused + " " + NSLocalizedString("of", comment: "") + " " + amount
                                 .formatted() + NSLocalizedString(" U", comment: "")
                         )
-                    }.frame(width: 250, height: 25).font(.bolusProgressBarFont)
+                    }.frame(width: 250, height: 25).font(.system(size: 14, weight: .semibold, design: .rounded))
                     HStack(alignment: .bottom, spacing: 5) {
                         ProgressView(value: Double(progress)).progressViewStyle(BolusProgressViewStyle())
                             .overlay {
                                 Image(systemName: "pause.fill")
                                     .symbolRenderingMode(.palette)
                                     .foregroundStyle(.white, .blue)
-                                    .font(.bolusProgressStopFont)
+                                    .font(.system(size: 18))
                             }
                     }
                     .onTapGesture { state.cancelBolus() }
@@ -677,52 +941,61 @@ extension Home {
 
         @ViewBuilder private func headerView(_ geo: GeometryProxy) -> some View {
             let height: CGFloat = displayGlucose ? 140 : 210
-            addHeaderBackground()
-                .frame(
-                    height: fontSize < .extraExtraLarge ? height + geo.safeAreaInsets.top : height + 10 + geo
-                        .safeAreaInsets.top
-                )
-                .clipShape(Rectangle())
-                .overlay {
-                    VStack {
-                        ZStack {
-                            if !displayGlucose {
-                                glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -5)
-                                loopView
-                                    .frame(
-                                        maxWidth: .infinity,
-                                        maxHeight: .infinity,
-                                        alignment: .topLeading
-                                    )
-                                    .padding(20)
-                                    .offset(x: 5, y: -10)
-                            }
-                            if displayGlucose {
-                                glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)
-                            } else {
-                                HStack {
-                                    carbsAndInsulinView
-                                        .frame(maxHeight: .infinity, alignment: .bottom)
-                                    Spacer()
-                                    pumpView
-                                        .frame(maxHeight: .infinity, alignment: .bottom)
-                                }
-                                .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                                .padding(.horizontal, 10)
-                                .padding(.bottom, 5)
-                            }
-                        }
 
-                        if displayGlucose {
-                            glucosePreview
-                        } else {
-                            infoPanelView
-                        }
-
-                        Divider()
-                    }
-                    .padding(.top, geo.safeAreaInsets.top)
+            ZStack {
+                if colorScheme == .dark {
+                    Color(red: 0.04, green: 0.06, blue: 0.12).opacity(0.85)
+                        .background(Material.ultraThin)
+                } else {
+                    addHeaderBackground()
                 }
+            }
+            .frame(
+                height: fontSize < .extraExtraLarge ? height + geo.safeAreaInsets.top : height + 10 + geo
+                    .safeAreaInsets.top
+            )
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.4 : 0.1), radius: 20, x: 0, y: 10)
+            .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+            .overlay {
+                VStack {
+                    ZStack {
+                        if !displayGlucose {
+                            glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -5)
+                            loopView
+                                .frame(
+                                    maxWidth: .infinity,
+                                    maxHeight: .infinity,
+                                    alignment: .topLeading
+                                )
+                                .padding(20)
+                                .offset(x: 5, y: -10)
+                        }
+                        if displayGlucose {
+                            glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)
+                        } else {
+                            HStack {
+                                carbsAndInsulinView
+                                    .frame(maxHeight: .infinity, alignment: .bottom)
+                                Spacer()
+                                pumpView
+                                    .frame(maxHeight: .infinity, alignment: .bottom)
+                            }
+                            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 5)
+                        }
+                    }
+
+                    if displayGlucose {
+                        glucosePreview
+                            .padding(.bottom, 10)
+                    } else {
+                        infoPanelView
+                            .padding(.bottom, 10)
+                    }
+                }
+                .padding(.top, geo.safeAreaInsets.top)
+            }
         }
 
         var glucosePreview: some View {
@@ -779,25 +1052,37 @@ extension Home {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.primary)
-            .font(.timeSettingFont)
-            .padding(.vertical, 15)
-            .background(TimeEllipse(characters: hourLabel.count))
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.5))
+                    .background(.ultraThinMaterial)
+            )
+            .padding(.top, 10)
         }
 
         private var isfView: some View {
             ZStack {
                 HStack(spacing: 4) {
                     Image(systemName: "divide")
-                        .font(.system(size: 16))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.teal)
 
                     Text(String(describing: state.data.suggestion?.sensitivityRatio ?? 1))
                         .foregroundStyle(.primary)
-                        .lineLimit(1) // maximum 1 row
-                        .fixedSize(horizontal: true, vertical: false) // Prevent wrapping
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
-                .font(.timeSettingFont)
-                .background(TimeEllipse(characters: 10))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.5))
+                        .background(.ultraThinMaterial)
+                )
                 .onTapGesture {
                     if (state.autoisf && !disabled()) || enabled() {
                         displayAutoHistory.toggle()
@@ -807,6 +1092,7 @@ extension Home {
                 }
             }
             .offset(x: 130)
+            .padding(.top, 10)
         }
 
         private func enabled() -> Bool {
@@ -846,92 +1132,9 @@ extension Home {
         var body: some View {
             GeometryReader { geo in
                 if onboarded.first?.firstRun ?? true, let openAPSSettings = state.openAPSSettings {
-                    /// If old iAPS user pre v5.7.1 OpenAPS settings will be reset, but can be restored in View below
                     importResetSettingsView(settings: openAPSSettings)
                 } else {
-                    VStack(spacing: 0) {
-                        // Header View
-                        headerView(geo)
-                        ScrollView {
-                            VStack {
-                                // Main Chart
-                                chart
-                                // Adjust hours visible (X-Axis) and ratio display
-                                timeSetting
-                                    .overlay { isfView }
-                                // TIR Chart
-                                if !state.data.glucose.isEmpty {
-                                    preview.padding(.top, 15)
-                                }
-                                // Loops Chart
-                                loopPreview.padding(.vertical, 15)
-
-                                // COB Chart
-                                if state.carbData > 0 {
-                                    activeCOBView.padding(.bottom, 15)
-                                }
-
-                                // IOB Chart
-                                if !state.iobData.isEmpty {
-                                    activeIOBView.padding(.bottom, 15)
-                                }
-
-                                // Summary Views
-                                insulinView.padding(.bottom, 15)
-                                mealsView.padding(.bottom, 15)
-                            }
-                            .background {
-                                // Track vertical scroll
-                                GeometryReader { proxy in
-                                    let scrollPosition = proxy.frame(in: .named("HomeScrollView")).minY
-                                    let yThreshold: CGFloat = -550
-                                    Color.clear
-                                        .onChange(of: scrollPosition) {
-                                            if scrollPosition < yThreshold, state.iobs > 0 || state.carbData > 0,
-                                               !state.skipGlucoseChart
-                                            {
-                                                withAnimation(.easeOut(duration: 0.3)) { displayGlucose = true }
-                                            } else {
-                                                withAnimation(.easeOut(duration: 0.4)) { displayGlucose = false }
-                                            }
-                                        }
-                                }
-                            }
-                        }.coordinateSpace(name: "HomeScrollView")
-                        // Buttons
-                        buttonPanel(geo)
-                    }
-                    .background(
-                        colorScheme == .light ? IAPSconfig.homeViewBackgroundLight : IAPSconfig.homeViewBackgrundDark
-                    )
-                    .ignoresSafeArea(edges: .vertical)
-                    .overlay {
-                        if let progress = state.bolusProgress, let amount = state.bolusAmount {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 15)
-                                    .fill(
-                                        colorScheme == .light ? IAPSconfig
-                                            .homeViewBackgroundLight : IAPSconfig
-                                            .homeViewBackgrundDark
-                                    )
-                                    .frame(maxWidth: 320, maxHeight: 90)
-                                bolusProgressView(progress: progress, amount: amount)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .offset(y: -100)
-                        }
-                    }
-                    .onChange(of: scenePhase) {
-                        switch scenePhase {
-                        case .active:
-                            state.startTimer()
-                        case .background,
-                             .inactive:
-                            state.stopTimer()
-                        default:
-                            break
-                        }
-                    }
+                    mainHomeLayout(geo)
                 }
             }
             .onAppear {
@@ -954,8 +1157,14 @@ extension Home {
                 popup
                     .padding()
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.popUpGray)
+                        RoundedRectangle(cornerRadius: 40, style: .continuous)
+                            .fill(colorScheme == .dark ? Color(red: 0.08, green: 0.12, blue: 0.22) : Color.white)
+                            .background(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 40, style: .continuous)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 10)
                     )
                     .onTapGesture {
                         state.isStatusPopupPresented = false
@@ -971,28 +1180,144 @@ extension Home {
             }
         }
 
+        @ViewBuilder private func mainHomeLayout(_ geo: GeometryProxy) -> some View {
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+                    headerView(geo)
+                        .zIndex(1)
+                    scrollContentView
+                }
+
+                buttonPanel(geo)
+                    .zIndex(2)
+            }
+            .background(
+                colorScheme == .light ?
+                    LinearGradient(colors: [Color(white: 0.95), Color(white: 0.9)], startPoint: .top, endPoint: .bottom) :
+                    LinearGradient(
+                        colors: [Color(red: 0.04, green: 0.06, blue: 0.14), Color(red: 0.01, green: 0.01, blue: 0.03)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+            )
+            .ignoresSafeArea(edges: .vertical)
+            .overlay {
+                if let progress = state.bolusProgress, let amount = state.bolusAmount {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 40, style: .continuous)
+                            .fill(colorScheme == .dark ? Color.black.opacity(0.8) : Color.white.opacity(0.9))
+                            .background(.ultraThinMaterial)
+                            .frame(maxWidth: 320, maxHeight: 90)
+                            .shadow(radius: 20)
+                        bolusProgressView(progress: progress, amount: amount)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .offset(y: -100)
+                }
+            }
+            .onChange(of: scenePhase) {
+                switch scenePhase {
+                case .active:
+                    state.startTimer()
+                case .background,
+                     .inactive:
+                    state.stopTimer()
+                default:
+                    break
+                }
+            }
+            .onAppear {
+                withAnimation(.spring(response: 0.8, dampingFraction: 0.8, blendDuration: 0).delay(0.1)) {
+                    animateUI = true
+                }
+            }
+            .confirmationDialog("Cancel Profile Override", isPresented: $showCancelAlert) {
+                Button("Cancel Profile Override", role: .destructive) {
+                    state.cancelProfile()
+                    triggerUpdate.toggle()
+                }
+            }
+            .confirmationDialog("Cancel Temporary Target", isPresented: $showCancelTTAlert) {
+                Button("Cancel Temporary Target", role: .destructive) {
+                    state.cancelTempTarget()
+                }
+            }
+            .confirmationDialog("Bolus already in Progress", isPresented: $showBolusActiveAlert) {
+                Button("Bolus already in Progress!", role: .destructive) {
+                    showBolusActiveAlert = false
+                }
+            }
+        }
+
+        private var scrollContentView: some View {
+            ScrollView {
+                VStack(spacing: 20) {
+                    chart.padding(.top, 10)
+
+                    timeSetting
+                        .overlay { isfView }
+                        .padding(.horizontal, 16)
+
+                    if !state.data.glucose.isEmpty {
+                        preview
+                    }
+
+                    loopPreview.padding(.vertical, 8)
+
+                    if state.carbData > 0 { activeCOBView }
+                    if !state.iobData.isEmpty { activeIOBView }
+
+                    insulinView
+                    mealsView
+                }
+                .padding(.bottom, 100)
+                .opacity(animateUI ? 1 : 0)
+                .offset(y: animateUI ? 0 : 40)
+                .background { scrollObserverView }
+            }
+            .coordinateSpace(name: "HomeScrollView")
+        }
+
+        private var scrollObserverView: some View {
+            GeometryReader { proxy in
+                let scrollPosition = proxy.frame(in: .named("HomeScrollView")).minY
+                let yThreshold: CGFloat = -550
+                Color.clear
+                    .onChange(of: scrollPosition) {
+                        if scrollPosition < yThreshold, state.iobs > 0 || state.carbData > 0, !state.skipGlucoseChart {
+                            withAnimation(.easeOut(duration: 0.3)) { displayGlucose = true }
+                        } else {
+                            withAnimation(.easeOut(duration: 0.4)) { displayGlucose = false }
+                        }
+                    }
+            }
+        }
+
         private var popup: some View {
             VStack(alignment: .leading, spacing: 4) {
-                Text(state.statusTitle).font(.suggestionHeadline).foregroundColor(.white)
+                Text(state.statusTitle).font(.system(size: 16, weight: .bold, design: .rounded)).foregroundColor(.white)
                     .padding(.bottom, 4)
                 if let suggestion = state.data.suggestion {
                     TagCloudView(tags: suggestion.reasonParts).animation(.none, value: false)
 
-                    Text(suggestion.reasonConclusion.capitalizingFirstLetter()).font(.suggestionSmallParts)
+                    Text(suggestion.reasonConclusion.capitalizingFirstLetter())
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
                         .foregroundColor(.white)
                 } else {
-                    Text("No suggestion found").font(.suggestionHeadline).foregroundColor(.white)
+                    Text("No suggestion found").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundColor(.white)
                 }
                 if let errorMessage = state.errorMessage, let date = state.errorDate {
                     Text(NSLocalizedString("Status at", comment: "") + " " + dateFormatter.string(from: date))
                         .foregroundColor(.white)
-                        .font(.suggestionError)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
                         .padding(.bottom, 4)
                         .padding(.top, 8)
-                    Text(errorMessage).font(.suggestionError).fontWeight(.semibold).foregroundColor(.orange)
+                    Text(errorMessage).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundColor(.orange)
                 } else if let suggestion = state.data.suggestion, (suggestion.bg ?? 100) == 400 {
-                    Text("Invalid CGM reading (HIGH).").font(.suggestionError).bold().foregroundColor(.loopRed).padding(.top, 8)
-                    Text("SMBs and High Temps Disabled.").font(.suggestionParts).foregroundColor(.white).padding(.bottom, 4)
+                    Text("Invalid CGM reading (HIGH).").font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(.loopRed).padding(.top, 8)
+                    Text("SMBs and High Temps Disabled.").font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundColor(.white).padding(.bottom, 4)
                 }
             }
         }

@@ -94,18 +94,6 @@ extension NightscoutConfig {
                     Text("iAPS will fetch announcements, carbs and temp targets from Nightscout")
                 }
 
-                if let cgmManager = state.deviceManager.cgmManager,
-                   KnownPlugins.glucoseUploadingAvailable(for: cgmManager),
-                   !cgmManager.shouldSyncToRemoteService,
-                   state.isUploadEnabled
-                {
-                    Section {
-                        HStack {
-                            Text("Glucose upload disabled in CGM settings").foregroundStyle(.red)
-                        }
-                    }
-                }
-
                 Section {
                     Button("Import settings from Nightscout") {
                         importAlert = Alert(
@@ -184,6 +172,21 @@ extension NightscoutConfig {
                     footer: { Text("Uploads old glucose readings to Nightscout") }
                 }
 
+                // 🟢 NEU: Navigation zur neuen Makro-Übersicht anstelle des blinden Buttons
+                Section {
+                    NavigationLink(destination: MacroHistoryView(state: state)) {
+                        HStack {
+                            Image(systemName: "list.clipboard")
+                                .foregroundColor(.blue)
+                            Text("Makro-Speicher (Vorschau & Upload)")
+                        }
+                    }
+                    .disabled(state.url.isEmpty || state.connecting)
+                }
+                header: { Text("Mahlzeiten Historie") }
+                footer: {
+                    Text("Zeigt alle lokalen Makros an und erlaubt den Upload sowie die Bereinigung alter Daten (>93 Tage).") }
+
                 Section {
                     Toggle("Remote control", isOn: $state.allowAnnouncements)
                 } header: { Text("Allow Remote control of iAPS") }
@@ -208,6 +211,74 @@ public struct BackfillProgressViewStyle: ProgressViewStyle {
                 .tint(Color.loopGreen)
                 .scaleEffect(y: 5.5)
                 .frame(height: 10)
+        }
+    }
+}
+
+// 🟢 NEU: Die neue Ansicht (Screen) für die Makro-Vorschau und den Upload
+struct MacroHistoryView: View {
+    @ObservedObject var state: NightscoutConfig.StateModel
+    @Environment(\.presentationMode) var presentationMode
+
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }
+
+    var body: some View {
+        VStack {
+            if state.historicalMacros.isEmpty {
+                VStack {
+                    Spacer()
+                    Image(systemName: "tray")
+                        .font(.system(size: 50))
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 8)
+                    Text("Keine Makros in den letzten 93 Tagen gefunden.")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+            } else {
+                List {
+                    ForEach(state.historicalMacros, id: \.self) { meal in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(dateFormatter.string(from: meal.date ?? Date()))
+                                .font(.headline)
+                            HStack(spacing: 15) {
+                                Text("KH: \(meal.carbs?.decimalValue ?? 0) g")
+                                    .foregroundColor(.orange)
+                                Text("Fett: \(meal.fat?.decimalValue ?? 0) g")
+                                    .foregroundColor(.blue)
+                                Text("Prot: \(meal.protein?.decimalValue ?? 0) g")
+                                    .foregroundColor(.green)
+                            }
+                            .font(.subheadline)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+
+            Button(action: {
+                state.uploadMacrosAndCleanUp()
+                presentationMode.wrappedValue.dismiss() // Schließt die Ansicht nach Klick automatisch
+            }) {
+                Text("Diese \(state.historicalMacros.count) Einträge hochladen & alte bereinigen")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(state.historicalMacros.isEmpty ? Color.gray : Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .disabled(state.historicalMacros.isEmpty)
+            .padding()
+        }
+        .navigationTitle("Gespeicherte Makros")
+        .onAppear {
+            state.fetchHistoricalMacros() // Holt die Daten direkt beim Öffnen der Ansicht
         }
     }
 }

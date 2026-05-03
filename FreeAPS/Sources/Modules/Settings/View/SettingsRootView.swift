@@ -75,6 +75,18 @@ extension Settings {
                         Text("Notifications").navigationLink(to: .notificationsConfig, from: self)
                     } header: { Text("Services") }
 
+                    // 👇 NEUE SEKTION FÜR DEN KI-SERVER 👇
+                    Section(header: Text("Machine Learning")) {
+                        NavigationLink(destination: IAPSKIConfigView(resolver: resolver)) {
+                            HStack {
+                                Image(systemName: "server.rack")
+                                    .foregroundColor(.purple)
+                                Text("KI & Netcup Upload")
+                            }
+                        }
+                    }
+                    // 👆 ENDE DER NEUEN SEKTION 👆
+
                     Section {
                         Text("Pump Settings").navigationLink(to: .pumpSettingsEditor, from: self)
                         Text("Basal Profile").navigationLink(to: .basalProfileEditor(saveNewConcentration: false), from: self)

@@ -90,6 +90,12 @@ extension AddCarbs {
                 .onChange(of: foodSearchState.showSavedFoods) { syncDismissState() }
                 .onChange(of: carbPresets.count) { updateSavedFoods() }
                 .sheet(isPresented: $foodSearchState.showNewSavedFoodEntry) { foodItemEditorSheet }
+
+                // MARK: - Automatische Dauer-Neuberechnung bei jeder Makro-Anpassung
+
+                .onChange(of: state.carbs) { _ in updateDuration() }
+                .onChange(of: state.fat) { _ in updateDuration() }
+                .onChange(of: state.protein) { _ in updateDuration() }
         }
 
         @ViewBuilder private var content: some View {
@@ -133,10 +139,9 @@ extension AddCarbs {
                     foodSearchState.newFoodEntryToEdit = nil
                 }
             )
-            // .presentationDetents([.height(600), .large])
-            // .presentationDragIndicator(.visible)
         }
 
+        // FIX: Sicheres Auslesen der Makros für Hypo Handler
         private var hypoHandler: ((FoodItemDetailed, UIImage?, Date?) -> Void)? {
             guard state.id != nil,
                   state.id != "None",
@@ -147,7 +152,13 @@ extension AddCarbs {
                 guard button else { return }
 
                 state.hypoTreatment = true
-                state.addAIFood(override, fetch: editMode, food: food, date: date)
+                if let carbs = food.nutrition.values[.carbs] { state.carbs += carbs }
+                if let fat = food.nutrition.values[.fat] { state.fat += fat }
+                if let protein = food.nutrition.values[.protein] { state.protein += protein }
+                if let d = date { state.date = d }
+
+                let customDur = state.customDuration > 0 ? Double(truncating: state.customDuration as NSNumber) : nil
+                state.add(override, fetch: editMode, customDuration: customDur)
             }
         }
 
@@ -190,15 +201,20 @@ extension AddCarbs {
                 if let carbsReq = state.carbsRequired, state.carbs < carbsReq {
                     Section {
                         HStack {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
                             Text("Carbs required")
                             Spacer()
                             Text((Self.formatter.string(from: carbsReq as NSNumber) ?? "") + " g")
+                                .bold().foregroundColor(.orange)
                         }
                     }
                 }
 
                 Section {
+                    mealPresets
+
                     HStack {
+                        Image(systemName: "leaf.fill").foregroundColor(.primary).frame(width: 30)
                         Text("Carbs").fontWeight(.semibold)
                         Spacer()
                         DecimalTextField(
@@ -215,14 +231,36 @@ extension AddCarbs {
                         proteinAndFat()
                     }
 
+                    // MARK: - Waiters Notepad Zusammenfassung
+
+                    if state.combinedPresets.isNotEmpty {
+                        let summary = state.waitersNotepad()
+                        if summary.isNotEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(summary, id: \.self) { item in
+                                        Text(item)
+                                            .font(.footnote.weight(.semibold))
+                                            .padding(.horizontal, 12).padding(.vertical, 6)
+                                            .background(Color.green.opacity(0.15))
+                                            .foregroundColor(.green)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+
                     // Time
                     HStack {
-                        Text("Time")
+                        Image(systemName: "clock.fill").foregroundColor(.gray).frame(width: 30)
+                        Text("Uhrzeit")
                         Spacer()
                         if !pushed {
                             Button {
                                 pushed = true
-                            } label: { Text("Now") }.buttonStyle(.borderless).foregroundColor(.secondary).padding(.trailing, 5)
+                            } label: { Text("Jetzt") }.buttonStyle(.borderless).foregroundColor(.secondary).padding(.trailing, 5)
                         } else {
                             Button { state.date = state.date.addingTimeInterval(-15.minutes.timeInterval) }
                             label: { Image(systemName: "minus.circle") }.tint(.blue).buttonStyle(.borderless)
@@ -237,6 +275,41 @@ extension AddCarbs {
                             }
                             label: { Image(systemName: "plus.circle") }.tint(.blue).buttonStyle(.borderless)
                         }
+                    }
+                }
+
+                // MARK: - Verstoffwechselung & KI
+
+                Section(header: Text("VERSTOFFWECHSELUNG & KI").textCase(.uppercase).foregroundColor(.secondary)) {
+                    let rule = state.evaluateMeal()
+                    let standardDuration = state.getIAPSStandardDuration()
+
+                    HStack {
+                        Image(systemName: "sparkles").foregroundColor(.purple).frame(width: 30)
+                        Text("Typ")
+                        Spacer()
+                        Text(rule?.category ?? "Standard")
+                            .font(.caption).fontWeight(.semibold)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Color.secondary.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+
+                    if standardDuration > 0 {
+                        HStack {
+                            Image(systemName: "chart.bar.doc.horizontal").foregroundColor(.blue).frame(width: 30)
+                            Text("iAPS Standard")
+                            Spacer()
+                            Text("\(String(format: "%.1f", standardDuration)) h").foregroundColor(.secondary)
+                        }
+                    }
+
+                    HStack {
+                        Image(systemName: "timer").foregroundColor(.orange).frame(width: 30)
+                        Text("Dauer (anpassbar)")
+                        Spacer()
+                        DecimalTextField("0", value: $state.customDuration, formatter: Self.formatter, liveEditing: true)
+                        Text("h").foregroundColor(.secondary)
                     }
                 }
 
@@ -268,11 +341,14 @@ extension AddCarbs {
                 Section {
                     Button {
                         button.toggle()
-                        if button { state.add(override, fetch: editMode) }
+                        if button {
+                            let customDur = state.customDuration > 0 ? Double(truncating: state.customDuration as NSNumber) : nil
+                            state.add(override, fetch: editMode, customDuration: customDur)
+                        }
                     }
                     label: {
                         Text(
-                            ((state.skipBolus && !override && !editMode) || state.carbs <= 0) ? "Save" :
+                            ((state.skipBolus && !override && !editMode) || state.carbs <= 0) ? "Save Meal" :
                                 "Continue"
                         ) }
                         .disabled(empty)
@@ -293,6 +369,14 @@ extension AddCarbs {
 
         // MARK: - Helper Functions
 
+        private func updateDuration() {
+            if let rule = state.evaluateMeal() {
+                state.customDuration = Decimal(rule.durationHours)
+            } else {
+                state.customDuration = Decimal(state.getIAPSStandardDuration())
+            }
+        }
+
         // Opens an edit-and-save View
         private func saveAsPreset() {
             foodSearchState.newFoodEntryToEdit = FoodItemDetailed(
@@ -311,12 +395,19 @@ extension AddCarbs {
             saved.toggle()
         }
 
+        // FIX: Sicheres Auslesen der Makros beim Fortfahren der Suche
         private func handleFoodContinue(_ food: FoodItemDetailed, _: UIImage?, date: Date?) {
             button.toggle()
             guard button else { return }
 
             state.hypoTreatment = false
-            state.addAIFood(override, fetch: editMode, food: food, date: date)
+            if let carbs = food.nutrition.values[.carbs] { state.carbs += carbs }
+            if let fat = food.nutrition.values[.fat] { state.fat += fat }
+            if let protein = food.nutrition.values[.protein] { state.protein += protein }
+            if let d = date { state.date = d }
+
+            let customDur = state.customDuration > 0 ? Double(truncating: state.customDuration as NSNumber) : nil
+            state.add(override, fetch: editMode, customDuration: customDur)
         }
 
         private func handleOnAppear() {
@@ -325,6 +416,7 @@ extension AddCarbs {
             state.loadEntries(editMode)
             addMissingFoodIDs()
             updateSavedFoods()
+            updateDuration()
 
             guard !meal else { return }
 
@@ -354,6 +446,7 @@ extension AddCarbs {
 
         @ViewBuilder private func proteinAndFat() -> some View {
             HStack {
+                Image(systemName: "drop.fill").foregroundColor(.blue).frame(width: 30)
                 Text("Fat").foregroundColor(.blue)
                 Spacer()
                 DecimalTextField(
@@ -366,6 +459,7 @@ extension AddCarbs {
                 Text("grams").foregroundColor(.secondary)
             }
             HStack {
+                Image(systemName: "bolt.fill").foregroundColor(.green).frame(width: 30)
                 Text("Protein").foregroundColor(.green)
                 Spacer()
                 DecimalTextField(
@@ -457,25 +551,28 @@ extension AddCarbs {
             Section {
                 HStack {
                     if state.selection == nil {
-                        Button { presentPresets.toggle() }
-                        label: {
-                            HStack {
-                                Text(state.selection?.dish ?? NSLocalizedString("Saved Food", comment: ""))
-                                Text(">")
-                            }
-                        }.foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        Text("Gespeichertes Essen").foregroundColor(.primary)
+                        Spacer()
+                        Button(action: { presentPresets.toggle() }) {
+                            Image(systemName: "chevron.right").foregroundColor(.secondary).font(.caption).padding(.leading, 20)
+                        }
                     } else {
                         minusButton
                         Spacer()
 
-                        Button { presentPresets.toggle() }
-                        label: {
-                            HStack {
+                        VStack(spacing: 2) {
+                            // Holt sich die aktuellen Portionen sicher aus dem StateModel
+                            let portions = state.combinedPresets.first(where: { $0.preset == state.selection })?.portions ?? 1.0
+                            Text("\(format(Decimal(portions)))x").font(.caption).foregroundColor(.secondary)
+
+                            Button { presentPresets.toggle() }
+                            label: {
                                 Text(state.selection?.dish ?? NSLocalizedString("Saved Food", comment: ""))
-                                Text(">")
+                                    .fontWeight(.semibold).foregroundColor(.primary)
+                                    .lineLimit(1).truncationMode(.tail)
                             }
-                        }.foregroundStyle(.secondary)
+                        }
+
                         Spacer()
                         plusButton
                     }
@@ -491,20 +588,18 @@ extension AddCarbs {
                     state.combinedPresets = []
                 }
             }
-            label: { Image(systemName: "minus.circle.fill")
-            }
-            .buttonStyle(.borderless)
-            .disabled(state.selection == nil)
+            label: { Image(systemName: "minus.circle.fill").font(.title2).foregroundColor(.blue) }
+                .buttonStyle(.borderless)
+                .disabled(state.selection == nil)
         }
 
         private var plusButton: some View {
             Button {
                 state.plus()
             }
-            label: { Image(systemName: "plus.circle.fill")
-            }
-            .buttonStyle(.borderless)
-            .disabled(state.selection == nil)
+            label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundColor(.blue) }
+                .buttonStyle(.borderless)
+                .disabled(state.selection == nil)
         }
 
         private var presetView: some View {
@@ -575,20 +670,28 @@ extension AddCarbs {
 
             if !preset.hasChanges {
                 HStack {
-                    VStack(alignment: .leading) {
-                        Text(dish)
-                        HStack {
-                            Text("Carbs")
-                            Text("\(preset.carbs ?? 0)")
-                            Spacer()
-                            Text("Fat")
-                            Text("\(preset.fat ?? 0)")
-                            Spacer()
-                            Text("Protein")
-                            Text("\(preset.protein ?? 0)")
-                        }.foregroundStyle(.secondary).font(.caption).padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(dish).font(.headline).foregroundColor(.primary)
+
+                        HStack(spacing: 16) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "leaf.fill").foregroundColor(.primary)
+                                Text("\(format((preset.carbs as Decimal?) ?? 0))g")
+                            }
+                            HStack(spacing: 4) {
+                                Image(systemName: "drop.fill").foregroundColor(.blue)
+                                Text("\(format((preset.fat as Decimal?) ?? 0))g")
+                            }
+                            HStack(spacing: 4) {
+                                Image(systemName: "bolt.fill").foregroundColor(.green)
+                                Text("\(format((preset.protein as Decimal?) ?? 0))g")
+                            }
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                     }
                     .contentShape(Rectangle())
+                    .padding(.vertical, 4)
                     .onTapGesture {
                         state.selection = preset
                         state.addU(state.selection)
@@ -639,14 +742,14 @@ extension AddCarbs {
                 } catch { debug(.apsManager, "Failed to save \(moc.updatedObjects)") }
             }
             state.edit = false
-            isPromptPresented.toggle()
+            isPromptPresented = false
         }
 
         private func update() {
             newPreset.dish = state.presetToEdit?.dish ?? ""
-            newPreset.carbs = (state.presetToEdit?.carbs ?? 0) as Decimal
-            newPreset.fat = (state.presetToEdit?.fat ?? 0) as Decimal
-            newPreset.protein = (state.presetToEdit?.protein ?? 0) as Decimal
+            newPreset.carbs = (state.presetToEdit?.carbs as Decimal?) ?? 0
+            newPreset.fat = (state.presetToEdit?.fat as Decimal?) ?? 0
+            newPreset.protein = (state.presetToEdit?.protein as Decimal?) ?? 0
         }
 
         private func addfromCarbsView() {
@@ -709,16 +812,19 @@ extension AddCarbs {
                         TextField("", text: $newPreset.dish)
                     }
                     HStack {
+                        Image(systemName: "leaf.fill").foregroundColor(.primary).frame(width: 30)
                         Text("Carbs").foregroundStyle(.secondary)
                         Spacer()
                         DecimalTextField("0", value: $newPreset.carbs, formatter: Self.formatter, liveEditing: true)
                     }
                     HStack {
+                        Image(systemName: "drop.fill").foregroundColor(.blue).frame(width: 30)
                         Text("Fat").foregroundStyle(.secondary)
                         Spacer()
                         DecimalTextField("0", value: $newPreset.fat, formatter: Self.formatter, liveEditing: true)
                     }
                     HStack {
+                        Image(systemName: "bolt.fill").foregroundColor(.green).frame(width: 30)
                         Text("Protein").foregroundStyle(.secondary)
                         Spacer()
                         DecimalTextField("0", value: $newPreset.protein, formatter: Self.formatter, liveEditing: true)

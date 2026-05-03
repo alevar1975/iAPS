@@ -6,6 +6,7 @@ class MealMode: ObservableObject {
         case barcode
         case presets
         case meal
+        case search // 🟢 Das hier einfach hinzufügen!
     }
 
     var mode: Mode = .meal

@@ -17,7 +17,6 @@ struct FoodItemsSelectorView: View {
 
     @State private var selectedTags: Set<String> = []
 
-    // All tags from all food items in this selector
     private var allExistingTags: Set<String> {
         Set(searchResult.foodItems.flatMap { $0.tags ?? [] })
     }
@@ -32,28 +31,23 @@ struct FoodItemsSelectorView: View {
         }
     }
 
-    // Extract tags that exist in foods matching the currently selected tags
-    // This creates a progressive filtering experience
     private var allTags: [String] {
         var seen = Set<String>()
         var result: [String] = []
         var hasFavorites = false
 
-        // Get foods that match currently selected tags (or all foods if nothing selected)
         let matchingFoods: [FoodItemDetailed]
         if selectedTags.isEmpty {
             matchingFoods = searchResult.foodItems
         } else {
             matchingFoods = searchResult.foodItems.filter { foodItem in
                 guard let tags = foodItem.tags else { return false }
-                // Food item must have ALL selected tags
                 return selectedTags.allSatisfy { selectedTag in
                     tags.contains(selectedTag)
                 }
             }
         }
 
-        // Collect all tags from matching foods
         for foodItem in matchingFoods {
             if let tags = foodItem.tags {
                 for tag in tags {
@@ -70,7 +64,6 @@ struct FoodItemsSelectorView: View {
             }
         }
 
-        // Always put favorites first if it exists
         if hasFavorites {
             result.insert(FoodTags.favorites, at: 0)
         }
@@ -82,18 +75,15 @@ struct FoodItemsSelectorView: View {
         let trimmedFilter = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         var items = searchResult.foodItems
 
-        // Filter by text search
         if !trimmedFilter.isEmpty {
             items = items.filter { foodItem in
                 foodItem.name.lowercased().contains(trimmedFilter)
             }
         }
 
-        // Filter by selected tags
         if !selectedTags.isEmpty {
             items = items.filter { foodItem in
                 guard let tags = foodItem.tags else { return false }
-                // Food item must have ALL selected tags
                 return selectedTags.allSatisfy { selectedTag in
                     tags.contains(selectedTag)
                 }
@@ -106,7 +96,6 @@ struct FoodItemsSelectorView: View {
     var body: some View {
         Group {
             if filteredFoodItems.isEmpty && !filterText.isEmpty {
-                // Show empty state in ScrollView when no results
                 ScrollView {
                     VStack(spacing: 12) {
                         Image(systemName: "magnifyingglass")
@@ -124,7 +113,6 @@ struct FoodItemsSelectorView: View {
                 .scrollDismissesKeyboard(.immediately)
             } else {
                 List {
-                    // Tag cloud section (only for saved foods)
                     if showTagCloud && !allTags.isEmpty {
                         Section {
                             FoodTagCloudView(
@@ -162,7 +150,7 @@ struct FoodItemsSelectorView: View {
                                 index != filteredFoodItems.count - 1 ? .visible : .hidden,
                                 edges: .bottom
                             )
-                            .listRowBackground(useTransparentBackground ? Color.clear : Color(.systemGray6))
+                            .listRowBackground(useTransparentBackground ? Color.clear : Color(.systemBackground))
                         }
                     }
                 }
@@ -196,33 +184,23 @@ private struct FoodItemsSelectorItemRow: View {
     @State private var showImageSelector = false
     @State private var isSavingImage = false
 
-    private let displayNutrients: [NutrientType] = [.carbs, .protein, .fat]
-
     var body: some View {
         VStack(spacing: 0) {
-            // Main Row Content
             HStack(alignment: .center, spacing: 12) {
                 if onPersist != nil {
                     Button(action: {
                         showImageSelector = true
                     }) {
                         if isSavingImage {
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 12)
                                 .fill(Color(.systemGray5))
                                 .frame(width: 60, height: 60)
-                                .overlay(
-                                    ProgressView()
-                                        .controlSize(.small)
-                                )
+                                .overlay(ProgressView().controlSize(.small))
                         } else if foodItem.imageURL != nil {
-                            // Has image - show it without any badge (clean look)
                             FoodItemThumbnail(imageURL: foodItem.imageURL)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                                )
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.blue.opacity(0.3), lineWidth: 1))
                         } else {
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 12)
                                 .fill(Color(.systemGray5))
                                 .frame(width: 60, height: 60)
                                 .overlay(
@@ -252,11 +230,10 @@ private struct FoodItemsSelectorItemRow: View {
                     FoodItemThumbnail(imageURL: foodItem.imageURL)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Text(foodItem.name)
-                            .font(.body)
-                            .fontWeight(.medium)
+                            .font(.headline)
                             .foregroundColor(.primary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -271,47 +248,37 @@ private struct FoodItemsSelectorItemRow: View {
                         .buttonStyle(.plain)
                     }
 
-                    HStack(spacing: 8) {
-                        if case let .per100(_, portionSize) = foodItem.nutrition {
-                            NutritionBadgePlain(
-                                value: portionSize,
-                                unit: foodItem.units?.dimension ?? UnitMass.grams,
-                                localizedLabel: "",
-                                color: .primary
-                            )
-                        } else {
-                            Spacer().frame(maxWidth: .infinity)
-                        }
+                    // MARK: - Die kompakten horizontalen Icons
 
-                        ForEach(displayNutrients, id: \.self) { nutrient in
-                            if let value = foodItem.nutrientInThisPortion(nutrient) {
-                                NutritionBadgePlainStacked(
-                                    value: value,
-                                    localizedLabel: nutrient.localizedLabel,
-                                    color: nutrient.badgeColor
+                    HStack(spacing: 12) {
+                        ForEach(NutrientType.allCases.filter { $0.isPrimary }) { nutrient in
+                            HStack(spacing: 4) {
+                                Image(systemName: icon(for: nutrient))
+                                    .foregroundColor(color(for: nutrient))
+                                    .font(.system(size: 12))
+                                Text(
+                                    "\(Double(truncating: (foodItem.nutrientInThisPortion(nutrient) ?? 0) as NSNumber), specifier: "%.1f")g"
                                 )
-                                .frame(maxWidth: .infinity)
-                            } else {
-                                Spacer().frame(maxWidth: .infinity)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                             }
                         }
-                        if foodItem.caloriesInThisPortion > 0 {
-                            NutritionBadgePlainStacked(
-                                value: foodItem.caloriesInThisPortion,
-                                localizedLabel: UnitEnergy.kilocalories.symbol,
-                                color: NutritionBadgeConfig.caloriesColor
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "flame.fill")
+                                .foregroundColor(.red)
+                                .font(.system(size: 12))
+                            Text(
+                                "\(Double(truncating: (foodItem.caloriesInThisPortion ?? 0) as NSNumber), specifier: "%.0f") kcal"
                             )
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            Spacer().frame(maxWidth: .infinity)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         }
                     }
-                    .padding(.trailing, 40)
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
             .onTapGesture {
                 showItemInfo = true
@@ -319,7 +286,7 @@ private struct FoodItemsSelectorItemRow: View {
         }
         .padding(.top, isFirst ? 8 : 0)
         .padding(.bottom, isLast ? 8 : 0)
-        .background(useTransparentBackground ? Color.clear : Color(.systemGray6))
+        .background(useTransparentBackground ? Color.clear : Color(.systemBackground))
         .when(onPersist != nil) { view in
             view.swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
@@ -381,8 +348,6 @@ private struct FoodItemsSelectorItemRow: View {
                     showEditSheet = false
                 }
             )
-            // .presentationDetents([.height(600), .large])
-            // .presentationDragIndicator(.visible)
         }
     }
 
@@ -391,11 +356,8 @@ private struct FoodItemsSelectorItemRow: View {
         showEditSheet = false
     }
 
-    /// Handles image selection from the ImageSelectorView
-    /// Resizes the image, saves it to storage, and updates the food item
     private func handleImageSelection(_ image: UIImage) {
         guard let onPersist = onPersist else { return }
-
         isSavingImage = true
         showImageSelector = false
 
@@ -410,8 +372,26 @@ private struct FoodItemsSelectorItemRow: View {
 
     private func removeImage() {
         guard let onPersist = onPersist else { return }
-
         let updatedItem = foodItem.copy(imageURL: .some(nil))
         onPersist(updatedItem)
+    }
+
+    // Helper für die Icons in der Suchliste
+    private func icon(for nutrient: NutrientType) -> String {
+        switch nutrient {
+        case .carbs: return "leaf.fill"
+        case .fat: return "drop.fill"
+        case .protein: return "bolt.fill"
+        default: return ""
+        }
+    }
+
+    private func color(for nutrient: NutrientType) -> Color {
+        switch nutrient {
+        case .carbs: return .primary
+        case .fat: return .blue
+        case .protein: return .green
+        default: return .secondary
+        }
     }
 }

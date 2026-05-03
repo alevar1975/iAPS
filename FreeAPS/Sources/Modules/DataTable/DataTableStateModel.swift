@@ -257,17 +257,22 @@ extension DataTable {
                 protein: meal.protein,
                 note: old.note,
                 enteredBy: CarbsEntry.manual,
-                isFPU: false
+                isFPU: false,
+                kcal: nil,
+                duration: nil // 🟢 FIX: Fehlendes Argument für 'duration'
             )
 
             if let deleteOld = computed {
                 OverrideStorage().DeleteBatch(identifier: deleteOld.id, entity: "Carbohydrates")
             }
-
-            nightscout.deleteCarbs(old.creationDate)
             carbStorage.storeCarbs([newCarbs])
+            nightscout.deleteCarbs(old.creationDate)
             debug(.apsManager, "Carbs updated: \(old.amountText) -> \(meal.carbs) g")
-            if newCarbs.carbs != oldCarbs, (newCarbs.actualDate ?? .distantPast).timeIntervalSinceNow > -3.hours.timeInterval {
+
+            // 🟢 FIX: Date.distantPast statt .distantPast für korrekte Typinferenz
+            if newCarbs.carbs != oldCarbs,
+               (newCarbs.actualDate ?? Date.distantPast).timeIntervalSinceNow > -3.hours.timeInterval
+            {
                 aps.determineBasalSync()
             }
         }

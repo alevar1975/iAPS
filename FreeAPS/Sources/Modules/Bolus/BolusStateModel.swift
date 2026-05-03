@@ -295,7 +295,9 @@ extension Bolus {
                     protein: Decimal(recent.protein),
                     note: recent.note,
                     enteredBy: CarbsEntry.manual,
-                    isFPU: false
+                    isFPU: false,
+                    kcal: nil,
+                    duration: nil // 🟢 FIX: Dauer hinzugefügt
                 )]
             }
 
@@ -463,7 +465,9 @@ extension Bolus {
                     protein: Decimal(recent.protein),
                     note: recent.note,
                     enteredBy: CarbsEntry.manual,
-                    isFPU: false
+                    isFPU: false,
+                    kcal: nil,
+                    duration: nil // 🟢 FIX: Dauer hinzugefügt
                 )]
 
                 if let passForward = carbToStore.first {
