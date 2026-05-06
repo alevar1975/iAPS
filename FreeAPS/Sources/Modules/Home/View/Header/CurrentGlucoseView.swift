@@ -90,6 +90,8 @@ struct CurrentGlucoseView: View {
     var body: some View {
         glucoseView
             .dynamicTypeSize(DynamicTypeSize.medium ... DynamicTypeSize.xLarge)
+            .onAppear { updateDirectionIfNeeded() }
+            .onChange(of: recentGlucose?.dateString) { _ in updateDirectionIfNeeded() }
     }
 
     var glucoseView: some View {
@@ -172,9 +174,38 @@ struct CurrentGlucoseView: View {
         .padding(20)
     }
 
-    // 🟢 Basis-Winkel des Pfeils aus dem iAPS Backend oder via Delta-Fallback
+    // 🟢 Pusht die berechnete Richtung zurück ins iAPS StateModel
+    private func updateDirectionIfNeeded() {
+        guard let deltaInt = delta else { return }
+
+        var needsUpdate = false
+        if let dir = recentGlucose?.direction {
+            switch dir {
+            case .none,
+                 .notComputable,
+                 .rateOutOfRange:
+                needsUpdate = true
+            default:
+                needsUpdate = false
+            }
+        } else {
+            needsUpdate = true
+        }
+
+        if needsUpdate {
+            // Führe das Zuweisen asynchron aus, um SwiftUI-Status-Warnungen zu vermeiden
+            DispatchQueue.main.async {
+                if deltaInt >= 10 { self.recentGlucose?.direction = .doubleUp }
+                else if deltaInt >= 4 { self.recentGlucose?.direction = .singleUp }
+                else if deltaInt <= -10 { self.recentGlucose?.direction = .doubleDown }
+                else if deltaInt <= -4 { self.recentGlucose?.direction = .singleDown }
+                else { self.recentGlucose?.direction = .flat }
+            }
+        }
+    }
+
+    // 🟢 UI Fallback-Winkel für schnelle Animation
     private var adjustments: (degree: Double, x: CGFloat, y: CGFloat) {
-        // 1. Versuche, die Richtung explizit vom CGM zu lesen
         if let direction = recentGlucose?.direction {
             switch direction {
             case .doubleUp,
@@ -194,26 +225,25 @@ struct CurrentGlucoseView: View {
             case .none,
                  .notComputable,
                  .rateOutOfRange:
-                break // Fallthrough zum Delta-Berechner!
+                break // Fallthrough zum Delta-Berechner falls das Update noch nicht da ist
             }
         }
 
-        // 2. Fallback: Berechne den Winkel aus dem Delta (Änderung des Glukosewerts)
         if let deltaInt = delta {
             if deltaInt >= 10 {
-                return (0, 0, 0) // Stark steigend (Double Up)
+                return (0, 0, 0)
             } else if deltaInt >= 4 {
-                return (45, 0, 0) // Leicht steigend (Single Up / 45 Up)
+                return (45, 0, 0)
             } else if deltaInt <= -10 {
-                return (180, 0, 0) // Stark fallend (Double Down)
+                return (180, 0, 0)
             } else if deltaInt <= -4 {
-                return (135, 0, 0) // Leicht fallend (Single Down / 45 Down)
+                return (135, 0, 0)
             } else {
-                return (90, 0, 0) // Gleichbleibend (Flat)
+                return (90, 0, 0)
             }
         }
 
-        return (90, 0, 0) // Absoluter Not-Fallback: Flat
+        return (90, 0, 0)
     }
 
     private func GlucoseValuePod(recentGlucose: BloodGlucose, scrolling: Bool) -> some View {
@@ -334,7 +364,8 @@ struct AnimatedTrendRing: View {
                             .frame(width: CGFloat.random(in: 2 ... 4), height: CGFloat.random(in: 2 ... 4))
                             .offset(y: -radius + CGFloat.random(in: -3 ... 3))
                             .rotationEffect(.degrees(Double(i) * 30))
-                            .opacity(sparkleOpacity * Double.random(in: 0.4 ... 1.0))
+                            // Fix: Deterministischer Pseudo-Zufall, damit es bei State-Updates nicht flackert
+                            .opacity(sparkleOpacity * (0.4 + (Double((i * 7) % 12) / 12.0) * 0.6))
                             .shadow(color: color, radius: 2)
                     }
                 }
@@ -389,7 +420,7 @@ struct AnimatedTrendRing: View {
             .rotationEffect(.degrees(angleFromThree))
         }
         .frame(width: size, height: size)
-        // 🟢 Zwingt die View sich sauber neu aufzubauen und Animationen zu starten, sobald neue Werte da sind
+        // 🟢 Zwingt die View sich sauber neu aufzubauen, sobald neue Werte da sind
         .id("\(dateString?.timeIntervalSince1970 ?? 0)_\(degree)")
         .onAppear {
             startHardwareAnimation(isRising: isRising, isFlat: isFlat)
@@ -397,22 +428,35 @@ struct AnimatedTrendRing: View {
     }
 
     func startHardwareAnimation(isRising: Bool, isFlat: Bool) {
-        // 1. Die Atmung des Pfeils (Läuft endlos als Puls-Effekt weiter)
-        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-            breatheOffset = 3 // Atmet um 3px nach außen
+        // 1. ZWINGENDER RESET (ohne Animation): Nur so startet SwiftUI die Loop sauber neu!
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            tailRotation = 0
+            breatheOffset = -1
+            sparkleOpacity = 0.2
         }
 
-        // 2. Der Orbit oder das Funkeln auf dem Ring (Streng auf 10 Sekunden limitiert)
-        if isFlat {
-            // 20 Wiederholungen x 0,5 Sekunden = Genau 10 Sekunden
-            withAnimation(.easeInOut(duration: 0.5).repeatCount(20, autoreverses: true)) {
-                sparkleOpacity = 0.9
+        // 2. LEICHTE VERZÖGERUNG: SwiftUI braucht diese Millisekunden, um den Reset zu rendern
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            // Die Atmung des Pfeils (Läuft endlos als Puls-Effekt weiter)
+            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                breatheOffset = 3 // Atmet um 3px nach außen
             }
-        } else {
-            // 10 volle Umdrehungen x 1,0 Sekunden = Genau 10 Sekunden
-            withAnimation(.linear(duration: 1.0).repeatCount(10, autoreverses: false)) {
-                // Steigend: Gegen den Uhrzeigersinn (-360). Fallend: Im Uhrzeigersinn (360)
-                tailRotation = isRising ? -360 : 360
+
+            // Der Orbit oder das Funkeln auf dem Ring (Streng auf 10 Sekunden limitiert)
+            if isFlat {
+                // 20 Wiederholungen x 0,5 Sekunden = Genau 10 Sekunden
+                withAnimation(.easeInOut(duration: 0.5).repeatCount(20, autoreverses: true)) {
+                    sparkleOpacity = 0.9
+                }
+            } else {
+                // 10 volle Umdrehungen x 1,0 Sekunden = Genau 10 Sekunden
+                withAnimation(.linear(duration: 1.0).repeatCount(10, autoreverses: false)) {
+                    // Steigend: Gegen den Uhrzeigersinn (-360)
+                    // Fallend: Im Uhrzeigersinn (360)
+                    tailRotation = isRising ? -360 : 360
+                }
             }
         }
     }
