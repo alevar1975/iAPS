@@ -701,7 +701,7 @@ extension Home {
                         if state.tdd3DaysAgo > 0 {
                             BarMark(x: .value("Tag", "Vor 3"), y: .value("IE", state.tdd3DaysAgo))
                                 .foregroundStyle(LinearGradient(
-                                    colors: [Color.cyan, Color.blue],
+                                    colors: [.red, .orange, .yellow, .green, .blue, .purple],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 ))
@@ -710,7 +710,7 @@ extension Home {
                         if state.tdd2DaysAgo > 0 {
                             BarMark(x: .value("Tag", "Vor 2"), y: .value("IE", state.tdd2DaysAgo))
                                 .foregroundStyle(LinearGradient(
-                                    colors: [Color.cyan, Color.blue],
+                                    colors: [.red, .orange, .yellow, .green, .blue, .purple],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 ))
@@ -719,7 +719,7 @@ extension Home {
                         if state.tddYesterday > 0 {
                             BarMark(x: .value("Tag", "Gestern"), y: .value("IE", state.tddYesterday))
                                 .foregroundStyle(LinearGradient(
-                                    colors: [Color.cyan, Color.blue],
+                                    colors: [.red, .orange, .yellow, .green, .blue, .purple],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 ))

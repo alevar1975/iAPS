@@ -371,6 +371,7 @@ extension Home {
 
         func runLoop() {
             provider.heartbeatNow()
+            apsManager.runLoop()
         }
 
         func cancelBolus() {

@@ -29,6 +29,11 @@ protocol APSManager {
     var lastError: CurrentValueSubject<Error?, Never> { get }
     func cancelBolus()
     func enactAnnouncement(_ announcement: Announcement)
+
+    // 🟢 NEU: Explizite Funktionen für den Loop (inklusive Force-Möglichkeit)
+    func runLoop()
+    func loop()
+    func loop(force: Bool)
 }
 
 enum APSError: LocalizedError {
@@ -201,7 +206,7 @@ final class BaseAPSManager: APSManager, Injectable {
             }
             .store(in: &lifetime)
 
-        // 🟢 NEU: Hochpriorisierter Timer für Loop UND CGM-Überwachung
+        // Hochpriorisierter Timer für Loop UND CGM-Überwachung
         Timer.publish(every: 300, on: .main, in: .common) // 300 Sekunden = 5 Minuten
             .autoconnect()
             .receive(on: processQueue)
@@ -228,7 +233,6 @@ final class BaseAPSManager: APSManager, Injectable {
                         case let .error(error):
                             warning(.apsManager, "Fehler beim aktiven Abrufen der CGM-Daten: \(error.localizedDescription)")
 
-                        // 🟢 NEU: Der Default-Fall macht den Switch "exhaustive" und befriedigt den Compiler
                         default:
                             debug(.apsManager, "Anderes CGM-Ergebnis erhalten (wird ignoriert).")
                         }
@@ -242,8 +246,6 @@ final class BaseAPSManager: APSManager, Injectable {
 
                     // Fehler ins System werfen
                     self.processError(APSError.glucoseError(message: errorMessage))
-
-                    // Optional: Push-Notification Logik hier einfügen
                 }
 
                 // 4. Den Loop-Durchlauf regulär anstoßen
@@ -252,16 +254,54 @@ final class BaseAPSManager: APSManager, Injectable {
             .store(in: &lifetime)
     }
 
-    // Loop entry point
-    private func loop() {
-        // check the last start of looping is more the loopInterval but the previous loop was completed
-        if lastLoopDate > lastStartLoopDate {
-            let loopInterval = settingsManager.settings.allowOneMinuteLoop ? Config.loopIntervalOneMinute : Config
-                .loopIntervalFiveMinutes
-            guard Date().timeIntervalSince(lastStartLoopDate) >= loopInterval else {
-                debug(.apsManager, "too close to do a loop : \(lastStartLoopDate)")
-                return
+    // 🟢 NEU: Manuelles Erzwingen von CGM-Fetch und Loop (Ideal für das Long-Press UI)
+    func runLoop() {
+        debug(.apsManager, "Manuelles Auslösen (Long Press): Hole CGM-Daten und erzwinge Loop.")
+
+        if let cgmManager = deviceDataManager.cgmManager {
+            cgmManager.fetchNewDataIfNeeded { [weak self] result in
+                switch result {
+                case let .newData(values):
+                    debug(.apsManager, "Manuell: Erfolgreich neue CGM-Daten abgerufen: \(values.count) Werte.")
+                case .noData:
+                    debug(.apsManager, "Manuell: Sensor hat noch keine neuen Daten.")
+                case let .error(error):
+                    warning(.apsManager, "Manuell: Fehler beim Abrufen der CGM-Daten: \(error.localizedDescription)")
+                default:
+                    break
+                }
+                // Loop in jedem Fall erzwingen, egal was das CGM antwortet
+                self?.processQueue.async {
+                    self?.loop(force: true)
+                }
             }
+        } else {
+            // Falls kein CGM-Manager aktiv ist, Loop trotzdem sofort erzwingen
+            processQueue.async {
+                self.loop(force: true)
+            }
+        }
+    }
+
+    // 🟢 Standard-Loop (wie bisher, wird z.B. vom Timer aufgerufen)
+    func loop() {
+        loop(force: false)
+    }
+
+    // 🟢 Eigentliche Loop-Logik mit Bypass (Force) für das Zeitintervall
+    func loop(force: Bool) {
+        // Zeitintervall-Check nur, wenn NICHT forciert wurde
+        if !force {
+            if lastLoopDate > lastStartLoopDate {
+                let loopInterval = settingsManager.settings.allowOneMinuteLoop ? Config.loopIntervalOneMinute : Config
+                    .loopIntervalFiveMinutes
+                guard Date().timeIntervalSince(lastStartLoopDate) >= loopInterval else {
+                    debug(.apsManager, "too close to do a loop : \(lastStartLoopDate)")
+                    return
+                }
+            }
+        } else {
+            debug(.apsManager, "Zeitlimit wird übergangen: Loop wird erzwungen!")
         }
 
         guard !appCoordinator.isLooping.value else {
@@ -345,12 +385,6 @@ final class BaseAPSManager: APSManager, Injectable {
 
         if let apsError = error {
             warning(.apsManager, "Loop failed with error: \(apsError.localizedDescription)")
-//            TODO: [loopkit] was this necessary here? the task is ended at the end of this method
-
-//            if let backgroundTask = backGroundTaskID {
-//                UIApplication.shared.endBackgroundTask(backgroundTask)
-//                backGroundTaskID = .invalid
-//            }
             processError(apsError)
             loopStats(loopStatRecord: loopStatRecord, error: apsError)
         } else {
@@ -650,7 +684,6 @@ final class BaseAPSManager: APSManager, Injectable {
 
             pump.enactBolus(units: roundedAmount, activationType: .manualRecommendationAccepted) { error in
                 if let error = error {
-                    // warning(.apsManager, "Announcement Bolus failed with error: \(error.localizedDescription)")
                     switch error {
                     case .uncertainDelivery:
                         // Do not generate notification on uncertain delivery error
@@ -716,7 +749,6 @@ final class BaseAPSManager: APSManager, Injectable {
                 return
             }
 
-            // unable to do temp basal during manual temp basal 😁
             if isManualTempBasal {
                 processError(APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp"))
                 return
@@ -753,7 +785,7 @@ final class BaseAPSManager: APSManager, Injectable {
                 enteredBy: "Nightscout operator",
                 isFPU: false,
                 kcal: nil,
-                duration: nil // 🟢 FIX: Dauer für Mahlzeiten-Befehle (Nightscout)
+                duration: nil
             )])
 
             announcementsStorage.storeAnnouncements([announcement], enacted: true)
@@ -850,7 +882,6 @@ final class BaseAPSManager: APSManager, Injectable {
             return Fail(error: APSError.apsError(message: "Pump not set")).eraseToAnyPublisher()
         }
 
-        // unable to do temp basal during manual temp basal 😁
         if isManualTempBasal {
             return Fail(error: APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp"))
                 .eraseToAnyPublisher()
@@ -864,7 +895,6 @@ final class BaseAPSManager: APSManager, Injectable {
             }
 
             guard let rate = suggested.rate, let duration = suggested.duration else {
-                // It is OK, no temp required
                 debug(.apsManager, "No temp required")
                 return Just(()).setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
@@ -895,7 +925,6 @@ final class BaseAPSManager: APSManager, Injectable {
             }
 
             guard let units = suggested.units else {
-                // It is OK, no bolus required
                 debug(.apsManager, "No bolus required")
                 return Just(()).setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
@@ -924,7 +953,6 @@ final class BaseAPSManager: APSManager, Injectable {
 
             storage.save(enacted, as: OpenAPS.Enact.enacted)
 
-            // Save to CoreData also. TO DO: Remove the JSON saving after some testing.
             coredataContext.perform {
                 let saveLastLoop = LastLoop(context: self.coredataContext)
                 saveLastLoop.iob = (enacted.iob ?? 0) as NSDecimalNumber
@@ -1442,18 +1470,14 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     private func clearBolusReporter() {
-        // 🟢 NEU: Merken, ob tatsächlich gerade ein Bolus überwacht wurde
         let wasBolusing = bolusReporter != nil
 
         bolusReporter?.removeObserver(self)
         bolusReporter = nil
 
-        // 🟢 FIX: Wir erhöhen die Wartezeit leicht auf 2.0 Sekunden,
-        // damit der Pumpenstatus im System auch wirklich sicher auf "nicht mehr bolusing" steht.
         processQueue.asyncAfter(deadline: .now() + 2.0) {
             self.bolusProgress.send(nil)
 
-            // 🟢 NEU: Wenn ein Bolus lief und jetzt fertig ist, triggern wir sofort den Loop!
             if wasBolusing {
                 debug(.apsManager, "Manueller Bolus beendet. Erzwungener Loop-Durchlauf startet.")
                 self.loop()

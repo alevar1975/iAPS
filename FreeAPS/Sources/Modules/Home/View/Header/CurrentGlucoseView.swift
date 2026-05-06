@@ -333,7 +333,7 @@ struct AnimatedTrendRing: View {
 
     @State private var breatheOffset: CGFloat = 0
     @State private var tailRotation: Double = 0
-    @State private var sparkleOpacity: Double = 0.3
+    @State private var sparkleOpacity: Double = 0.1 // Tieferer Startwert
 
     var body: some View {
         let size: CGFloat = !scrolling ? 100 : 65
@@ -350,23 +350,30 @@ struct AnimatedTrendRing: View {
             if isFlat {
                 // Flat: Der gesamte Ring funkelt
                 ZStack {
+                    // Äußerer Glow
                     Circle()
-                        .stroke(color.opacity(sparkleOpacity), lineWidth: !scrolling ? 4 : 2)
+                        .stroke(color, lineWidth: !scrolling ? 4 : 2) // 🟢 Farbe OHNE Opacity!
                         .blur(radius: 2)
+                        .opacity(sparkleOpacity) // 🟢 View-Modifier, der von SwiftUI interpoliert wird
 
+                    // Innerer scharfer Ring
                     Circle()
-                        .stroke(color.opacity(sparkleOpacity * 0.5), lineWidth: !scrolling ? 2 : 1)
+                        .stroke(color, lineWidth: !scrolling ? 2 : 1) // 🟢 Farbe OHNE Opacity!
+                        .opacity(sparkleOpacity * 0.5) // 🟢 View-Modifier
 
                     // Glitzer Partikel rund um den Ring
                     ForEach(0 ..< 12, id: \.self) { i in
+                        // 🟢 FIX: Deterministischer, fester Pseudo-Zufall, damit die Sterne beim Redraw nicht springen!
+                        let pSize = CGFloat(2 + (i % 3)) // Größen: 2, 3 oder 4
+                        let pOffset = CGFloat((i * 5) % 7 - 3) // Offset: Zwischen -3 und +3
+
                         Circle()
                             .fill(color)
-                            .frame(width: CGFloat.random(in: 2 ... 4), height: CGFloat.random(in: 2 ... 4))
-                            .offset(y: -radius + CGFloat.random(in: -3 ... 3))
+                            .frame(width: pSize, height: pSize)
+                            .offset(y: -radius + pOffset)
                             .rotationEffect(.degrees(Double(i) * 30))
-                            // Fix: Deterministischer Pseudo-Zufall, damit es bei State-Updates nicht flackert
-                            .opacity(sparkleOpacity * (0.4 + (Double((i * 7) % 12) / 12.0) * 0.6))
                             .shadow(color: color, radius: 2)
+                            .opacity(sparkleOpacity * (0.4 + (Double((i * 7) % 12) / 12.0) * 0.6))
                     }
                 }
             } else {
@@ -434,7 +441,7 @@ struct AnimatedTrendRing: View {
         withTransaction(transaction) {
             tailRotation = 0
             breatheOffset = -1
-            sparkleOpacity = 0.2
+            sparkleOpacity = 0.1 // Startet dunkel
         }
 
         // 2. LEICHTE VERZÖGERUNG: SwiftUI braucht diese Millisekunden, um den Reset zu rendern
@@ -446,9 +453,9 @@ struct AnimatedTrendRing: View {
 
             // Der Orbit oder das Funkeln auf dem Ring (Streng auf 10 Sekunden limitiert)
             if isFlat {
-                // 20 Wiederholungen x 0,5 Sekunden = Genau 10 Sekunden
+                // 20 Wiederholungen x 0,5 Sekunden = Genau 10 Sekunden Glühen
                 withAnimation(.easeInOut(duration: 0.5).repeatCount(20, autoreverses: true)) {
-                    sparkleOpacity = 0.9
+                    sparkleOpacity = 0.9 // Leuchtet hell auf!
                 }
             } else {
                 // 10 volle Umdrehungen x 1,0 Sekunden = Genau 10 Sekunden
