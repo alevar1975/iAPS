@@ -85,66 +85,20 @@ extension Home {
         @Published var mealData = MealData()
         @Published private var lastMealsResetDate = Calendar.current.startOfDay(for: Date())
 
-        // Chart data
         var data = ChartModel(
-            suggestion: nil,
-            glucose: [],
-            activity: [],
-            cob: [],
-            isManual: [],
-            tempBasals: [],
-            boluses: [],
-            suspensions: [],
-            announcement: [],
-            hours: 24,
-            maxBasal: 4,
-            autotunedBasalProfile: [],
-            basalProfile: [],
-            tempTargets: [],
-            carbs: [],
-            timerDate: Date(),
-            units: .mmolL,
-            smooth: false,
-            highGlucose: 200,
-            lowGlucose: 60,
-            displayXgridLines: true,
-            displayYgridLines: true,
-            thresholdLines: true,
-            latestOverride: nil,
-            overrideHistory: [],
-            minimumSMB: 0,
-            insulinDIA: 7,
-            insulinPeak: 75,
-            maxBolus: 0,
-            maxBolusValue: 1,
-            maxCarbsValue: 1,
-            maxIOB: 0,
-            maxCOB: 1,
-            useInsulinBars: true,
-            screenHours: 6,
-            fpus: true,
-            fpuAmounts: false,
-            showInsulinActivity: false,
-            showCobChart: false,
-            secondaryChartBackdrop: true,
-            inRangeAreaFill: false,
-            chartGlucosePeaks: false,
-            insulinActivityGridLines: true,
-            insulinActivityLabels: true,
-            yGridLabels: true,
-            showPredictionsLegend: true,
-            iob: nil,
-            hidePredictions: false,
-            useCarbBars: false
+            suggestion: nil, glucose: [], activity: [], cob: [], isManual: [], tempBasals: [], boluses: [], suspensions: [],
+            announcement: [], hours: 24, maxBasal: 4, autotunedBasalProfile: [], basalProfile: [], tempTargets: [], carbs: [],
+            timerDate: Date(), units: .mmolL, smooth: false, highGlucose: 200, lowGlucose: 60, displayXgridLines: true,
+            displayYgridLines: true, thresholdLines: true, latestOverride: nil, overrideHistory: [], minimumSMB: 0,
+            insulinDIA: 7, insulinPeak: 75, maxBolus: 0, maxBolusValue: 1, maxCarbsValue: 1, maxIOB: 0, maxCOB: 1,
+            useInsulinBars: true, screenHours: 6, fpus: true, fpuAmounts: false, showInsulinActivity: false,
+            showCobChart: false, secondaryChartBackdrop: true, inRangeAreaFill: false, chartGlucosePeaks: false,
+            insulinActivityGridLines: true, insulinActivityLabels: true, yGridLabels: true, showPredictionsLegend: true,
+            iob: nil, hidePredictions: false, useCarbBars: false
         )
 
-        func startTimer() {
-            timer.resume()
-        }
-
-        func stopTimer() {
-            timer.suspend()
-        }
+        func startTimer() { timer.resume() }
+        func stopTimer() { timer.suspend() }
 
         override func subscribe() {
             setupGlucose()
@@ -262,12 +216,10 @@ extension Home {
                     self?.data.timerDate = Date()
                     self?.setupCurrentTempTarget()
 
-                    // Meals history sheet, macros chart, kcal support and CGM trend mapping
                     guard let self = self else { return }
                     self.data.timerDate = Date()
                     self.setupCurrentTempTarget()
 
-                    // Reload meals only once per day change
                     let todayStart = Calendar.current.startOfDay(for: Date())
                     if todayStart > self.lastMealsResetDate {
                         self.lastMealsResetDate = todayStart
@@ -300,11 +252,6 @@ extension Home {
                 .receive(on: DispatchQueue.main)
                 .map { [weak self] error in
                     self?.errorDate = error == nil ? nil : Date()
-                    /* if let error = error,
-                        !error.localizedDescription.contains(NSLocalizedString("Pump is Busy.", comment: "Pump Error"))
-                     {
-                         info(.default, error.localizedDescription)
-                     } */
                     return error?.localizedDescription
                 }
                 .weakAssign(to: \.errorMessage, on: self)
@@ -365,31 +312,21 @@ extension Home {
             sensorDays = appCoordinator.sensorDays ?? settingsManager.settings.sensorDays
         }
 
-        func addCarbs() {
-            showModal(for: .addCarbs(editMode: false, override: false, mode: .meal))
-        }
+        func addCarbs() { showModal(for: .addCarbs(editMode: false, override: false, mode: .meal)) }
+        func runLoop() { provider.heartbeatNow()
+            apsManager.runLoop() }
 
-        func runLoop() {
-            provider.heartbeatNow()
-            apsManager.runLoop()
-        }
-
-        func cancelBolus() {
-            apsManager.cancelBolus()
-        }
+        func cancelBolus() { apsManager.cancelBolus() }
 
         func cancelProfile() {
             let os = OverrideStorage()
-            // Is there a saved Override?
             if let activeOveride = os.fetchLatestOverride().first {
                 let presetName = os.isPresetName()
-                // Is the Override a Preset?
                 if let preset = presetName {
                     if let duration = os.cancelProfile() {
-                        // Update in Nightscout
                         nightscoutManager.editOverride(preset, duration, activeOveride.date ?? Date.now)
                     }
-                } else if activeOveride.isPreset { // Because hard coded Hypo treatment isn't actually a preset
+                } else if activeOveride.isPreset {
                     if let duration = os.cancelProfile() {
                         nightscoutManager.editOverride("📉", duration, activeOveride.date ?? Date.now)
                     }
@@ -426,33 +363,47 @@ extension Home {
                 .receive(on: DispatchQueue.main)
                 .sink { completion in
                     switch completion {
-                    case .finished:
-                        debug(.service, "Preferences fetched from database. Profile: default")
-                    case let .failure(error):
-                        debug(.service, "Preferences fetched from database failed. Error: " + error.localizedDescription)
+                    case .finished: debug(.service, "Preferences fetched from database")
+                    case let .failure(error): debug(.service, "Fetch failed: " + error.localizedDescription)
                     }
                 }
             receiveValue: { self.openAPSSettings = $0 }
                 .store(in: &lifetime)
         }
 
+        // 🟢 MEGA-FIX 3.0: Harte Delta-Regel (Flat zwischen -5 und +5) für die App
         private func setupGlucose() {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.data.isManual = self.provider.manualGlucose(hours: self.filteredHours)
-                self.data.glucose = self.provider.filteredGlucose(hours: self.filteredHours)
-                self.readings = CoreDataStorage().fetchGlucose(interval: DateFilter().today)
-                self.recentGlucose = self.data.glucose.last
-                if self.data.glucose.count >= 2 {
-                    self.glucoseDelta =
-                        NSDecimalNumber(
-                            decimal:
-                            (self.recentGlucose?.unfiltered ?? 0) -
-                                (self.data.glucose[self.data.glucose.count - 2].unfiltered ?? 0)
-                        ).intValue
+
+                var fetchedGlucose = self.provider.filteredGlucose(hours: self.filteredHours)
+
+                if fetchedGlucose.count >= 2 {
+                    let lastIdx = fetchedGlucose.count - 1
+                    let prevIdx = fetchedGlucose.count - 2
+
+                    let latestVal = fetchedGlucose[lastIdx].unfiltered ?? Decimal(fetchedGlucose[lastIdx].glucose ?? 0)
+                    let prevVal = fetchedGlucose[prevIdx].unfiltered ?? Decimal(fetchedGlucose[prevIdx].glucose ?? 0)
+
+                    let deltaInt = NSDecimalNumber(decimal: latestVal - prevVal).intValue
+                    self.glucoseDelta = deltaInt
+
+                    var computedDirection: BloodGlucose.Direction = .flat
+                    if deltaInt > 10 { computedDirection = .doubleUp }
+                    else if deltaInt > 5 { computedDirection = .singleUp } // +6 bis +10
+                    else if deltaInt < -10 { computedDirection = .doubleDown }
+                    else if deltaInt < -5 { computedDirection = .singleDown } // -6 bis -10
+                    else { computedDirection = .flat } // -5 bis +5
+
+                    fetchedGlucose[lastIdx].direction = computedDirection
                 } else {
                     self.glucoseDelta = nil
                 }
+
+                self.data.glucose = fetchedGlucose
+                self.readings = CoreDataStorage().fetchGlucose(interval: DateFilter().today)
+                self.recentGlucose = fetchedGlucose.last
                 self.alarm = self.provider.glucoseStorage.alarm
             }
         }
@@ -486,9 +437,7 @@ extension Home {
         private func setupBoluses() {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                self.data.boluses = self.provider.pumpHistory(hours: self.filteredHours).filter {
-                    $0.type == .bolus
-                }
+                self.data.boluses = self.provider.pumpHistory(hours: self.filteredHours).filter { $0.type == .bolus }
                 self.data.maxBolusValue = self.data.boluses.compactMap(\.amount).max() ?? 1
             }
         }
@@ -499,10 +448,8 @@ extension Home {
                 self.data.suspensions = self.provider.pumpHistory(hours: self.filteredHours).filter {
                     $0.type == .pumpSuspend || $0.type == .pumpResume
                 }
-
                 let last = self.data.suspensions.last
                 let tbr = self.data.tempBasals.first { $0.timestamp > (last?.timestamp ?? .distantPast) }
-
                 self.pumpSuspended = tbr == nil && last?.type == .pumpSuspend
             }
         }
@@ -514,33 +461,23 @@ extension Home {
             }
         }
 
-        private func setupCob() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.data.cob = self.iobData
-            }
-        }
+        private func setupCob() { DispatchQueue.main.async { [weak self] in self?.data.cob = self?.iobData ?? [] } }
 
         private func setupPumpSettings() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.data.maxBasal = self.provider.pumpSettings().maxBasal
-            }
+            DispatchQueue.main.async { [weak self] in self?.data.maxBasal = self?.provider.pumpSettings().maxBasal ?? 4 }
         }
 
         private func setupBasalProfile() {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.data.autotunedBasalProfile = self.provider.autotunedBasalProfile()
-                self.data.basalProfile = self.provider.basalProfile()
+                self?.data.autotunedBasalProfile = self?.provider.autotunedBasalProfile() ?? []
+                self?.data.basalProfile = self?.provider.basalProfile() ?? []
             }
         }
 
         private func setupTempTargets() {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.manualTempBasal = self.apsManager.isManualTempBasal
-                self.data.tempTargets = self.provider.tempTargets(hours: self.filteredHours)
+                self?.manualTempBasal = self?.apsManager.isManualTempBasal ?? false
+                self?.data.tempTargets = self?.provider.tempTargets(hours: self?.filteredHours ?? 24) ?? []
             }
         }
 
@@ -554,9 +491,8 @@ extension Home {
 
         private func setupOverrideHistory() {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.data.latestOverride = self.provider.latestOverride()
-                self.data.overrideHistory = self.provider.overrideHistory()
+                self?.data.latestOverride = self?.provider.latestOverride()
+                self?.data.overrideHistory = self?.provider.overrideHistory() ?? []
             }
         }
 
@@ -565,15 +501,11 @@ extension Home {
             let loops = loopStats.compactMap({ each in each.loopStatus }).count
             let readings = CoreDataStorage().fetchGlucose(interval: DateFilter().today).compactMap({ each in each.glucose }).count
             let percentage = min(readings != 0 ? (Double(loops) / Double(readings) * 100) : 0, 100)
-            // First loop date
             let time = (loopStats.last?.start ?? Date.now).addingTimeInterval(-5.minutes.timeInterval)
-
             let average = -1 * (time.timeIntervalSinceNow / 60) / max(Double(loops), 1)
 
             loopStatistics = (
-                loops,
-                readings,
-                percentage,
+                loops, readings, percentage,
                 average.formatted(.number.grouping(.never).rounded().precision(.fractionLength(1))) + " min"
             )
         }
@@ -587,7 +519,7 @@ extension Home {
 
         private func setStatusTitle() {
             guard let suggestion = data.suggestion else {
-                statusTitle = NSLocalizedString("No suggestion", comment: "Status title when there is no suggestion")
+                statusTitle = NSLocalizedString("No suggestion", comment: "")
                 return
             }
 
@@ -598,11 +530,9 @@ extension Home {
                let timestamp = enactedSuggestion.timestamp,
                enactedSuggestion.deliverAt == suggestion.deliverAt, enactedSuggestion.recieved == true
             {
-                statusTitle = NSLocalizedString("Enacted at", comment: "Headline in enacted pop up") + " " + dateFormatter
-                    .string(from: timestamp)
+                statusTitle = NSLocalizedString("Enacted at", comment: "") + " " + dateFormatter.string(from: timestamp)
             } else if let suggestedDate = suggestion.deliverAt {
-                statusTitle = NSLocalizedString("Suggested at", comment: "Headline in suggested pop up") + " " + dateFormatter
-                    .string(from: suggestedDate)
+                statusTitle = NSLocalizedString("Suggested at", comment: "") + " " + dateFormatter.string(from: suggestedDate)
             } else {
                 statusTitle = "Suggested"
             }
@@ -610,38 +540,19 @@ extension Home {
             eventualBG = suggestion.eventualBG
         }
 
-        private func setupReservoir() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.reservoir = self.provider.pumpReservoir()
-            }
-        }
-
-        private func setupBattery() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.battery = self.provider.pumpBattery()
-            }
-        }
-
-        private func setupCurrentTempTarget() {
-            tempTarget = provider.tempTarget()
-        }
-
-        private func setupCurrentPumpTimezone() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.timeZone = self.provider.pumpTimeZone()
-            }
-        }
+        private func setupReservoir() { DispatchQueue.main.async { [weak self] in
+            self?.reservoir = self?.provider.pumpReservoir() } }
+        private func setupBattery() { DispatchQueue.main.async { [weak self] in self?.battery = self?.provider.pumpBattery() } }
+        private func setupCurrentTempTarget() { tempTarget = provider.tempTarget() }
+        private func setupCurrentPumpTimezone() { DispatchQueue.main.async { [weak self] in
+            self?.timeZone = self?.provider.pumpTimeZone() } }
 
         private func setupIOB() {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
                 Task {
                     do {
-                        if let sync = try await self.provider.iob() {
-                            self.data.iob = sync
+                        if let sync = try await self?.provider.iob() {
+                            self?.data.iob = sync
                         }
                     } catch { debug(.apsManager, "Error - Couldn't update foreground IOB value.") }
                 }
@@ -692,42 +603,18 @@ extension Home {
             }
         }
 
-        private func carbCount(_ fetchedMeals: [Carbohydrates]) -> Decimal {
-            fetchedMeals
-                .compactMap(\.carbs)
-                .map({ x in
-                    x as Decimal
-                }).reduce(0, +)
-        }
-
-        private func fatCount(_ fetchedMeals: [Carbohydrates]) -> Decimal {
-            fetchedMeals
-                .compactMap(\.fat)
-                .map({ x in
-                    x as Decimal
-                }).reduce(0, +)
-        }
-
-        private func proteinCount(_ fetchedMeals: [Carbohydrates]) -> Decimal {
-            fetchedMeals
-                .compactMap(\.protein)
-                .map({ x in
-                    x as Decimal
-                }).reduce(0, +)
-        }
-
-        private func servingsCount(_ fetchedMeals: [Carbohydrates]) -> Int {
-            fetchedMeals.count
-        }
-
-        private func kcalCount() -> Decimal {
-            4 * (mealData.carbs + mealData.protein) + mealData.fat * 9
-        }
+        private func carbCount(_ fetchedMeals: [Carbohydrates]) -> Decimal { fetchedMeals.compactMap(\.carbs).map({ x in
+            x as Decimal }).reduce(0, +) }
+        private func fatCount(_ fetchedMeals: [Carbohydrates]) -> Decimal { fetchedMeals.compactMap(\.fat).map({ x in
+            x as Decimal }).reduce(0, +) }
+        private func proteinCount(_ fetchedMeals: [Carbohydrates]) -> Decimal { fetchedMeals.compactMap(\.protein).map({ x in
+            x as Decimal }).reduce(0, +) }
+        private func servingsCount(_ fetchedMeals: [Carbohydrates]) -> Int { fetchedMeals.count }
+        private func kcalCount() -> Decimal { 4 * (mealData.carbs + mealData.protein) + mealData.fat * 9 }
 
         func openCGM() {
             if let cgm = provider.deviceManager.cgmManager {
                 if let url = cgm.appURL {
-                    // if app url is provided (nightscout, xDrip) - open it
                     UIApplication.shared.open(url, options: [:], completionHandler: nil)
                 } else if let cgm = cgm as? CGMManagerUI {
                     let view = CGM.CGMSettingsView(
@@ -741,9 +628,7 @@ extension Home {
         }
 
         func infoPanelTTPercentage(_ hbt_: Double, _ target: Decimal) -> Decimal {
-            guard hbt_ != 0 || target != 0 else {
-                return 0
-            }
+            guard hbt_ != 0 || target != 0 else { return 0 }
             let c = Decimal(hbt_ - 100)
             let ratio = min(c / (target + c - 100), maxValue)
             return (ratio * 100)
@@ -824,7 +709,6 @@ extension Home.StateModel:
         hours = settingsManager.settings.hours
         displayExpiration = settingsManager.settings.displayExpiration
         displaySAGE = settingsManager.settings.displaySAGE
-//        cgm = settingsManager.settings.cgm
         carbButton = settingsManager.settings.carbButton
         profileButton = settingsManager.settings.profileButton
         updateSensorDays()
@@ -843,23 +727,12 @@ extension Home.StateModel:
         setupActivity()
     }
 
-    func pumpSettingsDidChange(_: PumpSettings) {
-        setupPumpSettings()
-    }
-
-    func basalProfileDidChange(_: [BasalProfileEntry]) {
-        setupBasalProfile()
-    }
-
-    func tempTargetsDidUpdate(_: [TempTarget]) {
-        setupTempTargets()
-    }
-
-    func carbsDidUpdate(_: [CarbsEntry]) {
-        setupCarbs()
+    func pumpSettingsDidChange(_: PumpSettings) { setupPumpSettings() }
+    func basalProfileDidChange(_: [BasalProfileEntry]) { setupBasalProfile() }
+    func tempTargetsDidUpdate(_: [TempTarget]) { setupTempTargets() }
+    func carbsDidUpdate(_: [CarbsEntry]) { setupCarbs()
         setupAnnouncements()
-        setupMeals()
-    }
+        setupMeals() }
 
     func enactedSuggestionDidUpdate(_ suggestion: Suggestion) {
         enactedSuggestion = suggestion
@@ -869,17 +742,9 @@ extension Home.StateModel:
         setupData()
     }
 
-    func pumpBatteryDidChange(_: Battery) {
-        setupBattery()
-    }
-
-    func pumpReservoirDidChange(_: Decimal) {
-        setupReservoir()
-    }
-
-    func pumpTimeZoneDidChange(_: TimeZone) {
-        setupCurrentPumpTimezone()
-    }
+    func pumpBatteryDidChange(_: Battery) { setupBattery() }
+    func pumpReservoirDidChange(_: Decimal) { setupReservoir() }
+    func pumpTimeZoneDidChange(_: TimeZone) { setupCurrentPumpTimezone() }
 }
 
 extension Home.StateModel: CompletionDelegate {

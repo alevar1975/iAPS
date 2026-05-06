@@ -47,13 +47,33 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
                 var existingDates = existing.map(\.dateString)
                 var newRecords: [BloodGlucose] = []
                 newRecords.reserveCapacity(glucose.count)
-                for bg in glucose {
+
+                let sortedIncoming = glucose.sorted { $0.dateString < $1.dateString }
+                var lastBg: BloodGlucose? = existing.first
+
+                for bg in sortedIncoming {
                     if existingDates.contains(where: { abs($0.timeIntervalSince(bg.dateString)) <= 45 }) {
-                        // skip if we already have a record within +/- 45 seconds
                         continue
                     }
-                    newRecords.append(bg)
-                    existingDates.append(bg.dateString)
+
+                    var modifiedBg = bg
+
+                    // 🟢 MEGA-FIX 3.0: Harte Delta-Regel (Flat zwischen -5 und +5)
+                    if let prevBg = lastBg, let currentVal = modifiedBg.glucose, let prevVal = prevBg.glucose {
+                        let deltaInt = Int(currentVal) - Int(prevVal)
+
+                        if deltaInt > 10 { modifiedBg.direction = .doubleUp }
+                        else if deltaInt > 5 { modifiedBg.direction = .singleUp } // +6 bis +10
+                        else if deltaInt < -10 { modifiedBg.direction = .doubleDown }
+                        else if deltaInt < -5 { modifiedBg.direction = .singleDown } // -6 bis -10
+                        else { modifiedBg.direction = .flat } // -5 bis +5
+                    } else if modifiedBg.direction == nil {
+                        modifiedBg.direction = .flat
+                    }
+
+                    newRecords.append(modifiedBg)
+                    existingDates.append(modifiedBg.dateString)
+                    lastBg = modifiedBg
                 }
 
                 storage.append(newRecords, to: file, uniqBy: \.dateString)
@@ -64,10 +84,8 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
                     .sorted { $0.dateString > $1.dateString } ?? []
                 let newGlucoseData = Array(uniqEvents)
 
-                // FileStorage
                 storage.save(newGlucoseData, as: file)
 
-                // Only log once
                 debug(
                     .deviceManager,
                     "storeGlucose \(newRecords.count) new entries. Latest Glucose: \(String(describing: glucose.last?.glucose)) mg/Dl, date: \(String(describing: glucose.last?.dateString))."
@@ -85,7 +103,6 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
                 }
             }
 
-            // Do we have a sensor session start?
             if let sensorSessionStart = glucose.first(where: { $0.sessionStartDate != nil }) {
                 debug(.deviceManager, "start storage cgmState")
                 self.storage.transaction { storage in
@@ -100,12 +117,6 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
                     }
 
                     let sessionStartDate = sensorSessionStart.sessionStartDate
-                    // For Dexcom, each glucose event contains the sessionStartDate (which contains the correct timestamp of the latest sensor start)
-                    // We only need to send the "Sensor Start" event once per change.
-                    // This guard ensures we send a new "Sensor Start" event to NS only if the previously sent event happened more than 60 seconds before this one.
-                    //
-                    // As a side effect, if there is jitter in the sessionStartDate (+/- few milliseconds each time), we will flood NS with the duplicated Session Start events over time.
-                    // See: https://github.com/Artificial-Pancreas/iAPS/issues/1806
                     if let lastTreatment = treatments.last,
                        let lastCreatedAt = lastTreatment.createdAt,
                        let sessionStart = sessionStartDate,
@@ -135,7 +146,6 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
                     treatments.append(treatment)
                     debug(.deviceManager, "CGM sensor change \(String(describing: sensorSessionStart.sessionStartDate))")
 
-                    // We have to keep quite a bit of history as sensors start only every 10 days.
                     storage.save(
                         treatments.filter
                             { $0.createdAt != nil && $0.createdAt!.addingTimeInterval(30.days.timeInterval) > Date() },
@@ -179,13 +189,11 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     }
 
     func retrieve() -> [BloodGlucose] {
-        // newest-to-oldest
         var retrieved = storage.retrieve(OpenAPS.Monitor.glucose, as: [BloodGlucose].self)?.reversed() ?? []
         guard !retrieved.isEmpty else {
             return []
         }
         if settingsManager.settings.smoothGlucose {
-            // smooth with 3 repeats
             for _ in 1 ... 3 {
                 retrieved.smoothSavitzkyGolayQuaDratic(withFilterWidth: 3)
             }
@@ -194,7 +202,7 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     }
 
     func retrieveFiltered() -> [BloodGlucose] {
-        let retrieved = retrieve() // smoothed already
+        let retrieved = retrieve()
 
         let minInterval = settingsManager.settings.allowOneMinuteGlucose ? Config.filterTimeOneMinute : Config
             .filterTimeFiveMinutes
@@ -202,12 +210,10 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     }
 
     func filterFrequentGlucose(_ glucose: [BloodGlucose], interval: TimeInterval) -> [BloodGlucose] {
-        // glucose is already sorted newest-to-oldest in retrieve
         let sorted = glucose.sorted { $0.date > $1.date }
         guard let latest = sorted.first else { return [] }
 
         var lastDate = latest.dateString
-        // always keep the latest
         var filtered: [BloodGlucose] = [latest]
 
         for entry in sorted.dropFirst() {

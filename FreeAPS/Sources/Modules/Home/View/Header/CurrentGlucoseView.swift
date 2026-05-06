@@ -90,8 +90,6 @@ struct CurrentGlucoseView: View {
     var body: some View {
         glucoseView
             .dynamicTypeSize(DynamicTypeSize.medium ... DynamicTypeSize.xLarge)
-            .onAppear { updateDirectionIfNeeded() }
-            .onChange(of: recentGlucose?.dateString) { _ in updateDirectionIfNeeded() }
     }
 
     var glucoseView: some View {
@@ -174,73 +172,32 @@ struct CurrentGlucoseView: View {
         .padding(20)
     }
 
-    // 🟢 Pusht die berechnete Richtung zurück ins iAPS StateModel
-    private func updateDirectionIfNeeded() {
-        guard let deltaInt = delta else { return }
-
-        var needsUpdate = false
-        if let dir = recentGlucose?.direction {
-            switch dir {
-            case .none,
-                 .notComputable,
-                 .rateOutOfRange:
-                needsUpdate = true
-            default:
-                needsUpdate = false
-            }
-        } else {
-            needsUpdate = true
-        }
-
-        if needsUpdate {
-            // Führe das Zuweisen asynchron aus, um SwiftUI-Status-Warnungen zu vermeiden
-            DispatchQueue.main.async {
-                if deltaInt >= 10 { self.recentGlucose?.direction = .doubleUp }
-                else if deltaInt >= 4 { self.recentGlucose?.direction = .singleUp }
-                else if deltaInt <= -10 { self.recentGlucose?.direction = .doubleDown }
-                else if deltaInt <= -4 { self.recentGlucose?.direction = .singleDown }
-                else { self.recentGlucose?.direction = .flat }
-            }
-        }
-    }
-
-    // 🟢 UI Fallback-Winkel für schnelle Animation
+    // 🟢 Basis-Winkel des Pfeils aus dem iAPS Backend
+    // 🟢 Basis-Winkel des Pfeils aus dem iAPS Backend
     private var adjustments: (degree: Double, x: CGFloat, y: CGFloat) {
         if let direction = recentGlucose?.direction {
             switch direction {
             case .doubleUp,
-                 .tripleUp:
-                return (0, 0, 0) // 12 Uhr
+                 .tripleUp: return (0, 0, 0) // 12 Uhr
             case .fortyFiveUp,
-                 .singleUp:
-                return (45, 0, 0) // 1:30 Uhr
-            case .flat:
-                return (90, 0, 0) // 3 Uhr
+                 .singleUp: return (45, 0, 0) // 1:30 Uhr
+            case .flat: return (90, 0, 0) // 3 Uhr
             case .fortyFiveDown,
-                 .singleDown:
-                return (135, 0, 0) // 4:30 Uhr
+                 .singleDown: return (135, 0, 0) // 4:30 Uhr
             case .doubleDown,
-                 .tripleDown:
-                return (180, 0, 0) // 6 Uhr
+                 .tripleDown: return (180, 0, 0) // 6 Uhr
             case .none,
                  .notComputable,
-                 .rateOutOfRange:
-                break // Fallthrough zum Delta-Berechner falls das Update noch nicht da ist
+                 .rateOutOfRange: break
             }
         }
 
         if let deltaInt = delta {
-            if deltaInt >= 10 {
-                return (0, 0, 0)
-            } else if deltaInt >= 4 {
-                return (45, 0, 0)
-            } else if deltaInt <= -10 {
-                return (180, 0, 0)
-            } else if deltaInt <= -4 {
-                return (135, 0, 0)
-            } else {
-                return (90, 0, 0)
-            }
+            if deltaInt > 10 { return (0, 0, 0) }
+            else if deltaInt > 5 { return (45, 0, 0) }
+            else if deltaInt < -10 { return (180, 0, 0) }
+            else if deltaInt < -5 { return (135, 0, 0) }
+            else { return (90, 0, 0) }
         }
 
         return (90, 0, 0)
@@ -333,7 +290,7 @@ struct AnimatedTrendRing: View {
 
     @State private var breatheOffset: CGFloat = 0
     @State private var tailRotation: Double = 0
-    @State private var sparkleOpacity: Double = 0.1 // Tieferer Startwert
+    @State private var sparkleOpacity: Double = 0.2
 
     var body: some View {
         let size: CGFloat = !scrolling ? 100 : 65
@@ -348,22 +305,17 @@ struct AnimatedTrendRing: View {
         ZStack {
             // 🟢 1. DER SCHWEIF / SPARKLE (Völlig losgelöst vom Pfeil)
             if isFlat {
-                // Flat: Der gesamte Ring funkelt
+                // Flat: Der gesamte Ring funkelt für 15 Sekunden
                 ZStack {
-                    // Äußerer Glow
                     Circle()
-                        .stroke(color, lineWidth: !scrolling ? 4 : 2) // 🟢 Farbe OHNE Opacity!
+                        .stroke(color.opacity(sparkleOpacity), lineWidth: !scrolling ? 4 : 2)
                         .blur(radius: 2)
-                        .opacity(sparkleOpacity) // 🟢 View-Modifier, der von SwiftUI interpoliert wird
 
-                    // Innerer scharfer Ring
                     Circle()
-                        .stroke(color, lineWidth: !scrolling ? 2 : 1) // 🟢 Farbe OHNE Opacity!
-                        .opacity(sparkleOpacity * 0.5) // 🟢 View-Modifier
+                        .stroke(color.opacity(sparkleOpacity * 0.5), lineWidth: !scrolling ? 2 : 1)
 
-                    // Glitzer Partikel rund um den Ring
+                    // Glitzer Partikel rund um den Ring (Deterministisch, ohne Springen)
                     ForEach(0 ..< 12, id: \.self) { i in
-                        // 🟢 FIX: Deterministischer, fester Pseudo-Zufall, damit die Sterne beim Redraw nicht springen!
                         let pSize = CGFloat(2 + (i % 3)) // Größen: 2, 3 oder 4
                         let pOffset = CGFloat((i * 5) % 7 - 3) // Offset: Zwischen -3 und +3
 
@@ -372,12 +324,12 @@ struct AnimatedTrendRing: View {
                             .frame(width: pSize, height: pSize)
                             .offset(y: -radius + pOffset)
                             .rotationEffect(.degrees(Double(i) * 30))
-                            .shadow(color: color, radius: 2)
                             .opacity(sparkleOpacity * (0.4 + (Double((i * 7) % 12) / 12.0) * 0.6))
+                            .shadow(color: color, radius: 2)
                     }
                 }
             } else {
-                // Steigend/Fallend: Rasanter Kometenschweif
+                // Steigend/Fallend: Rasanter Kometenschweif, der endlos kreist
                 ZStack {
                     Circle()
                         .trim(from: 0.0, to: 0.25) // Ein Viertel des Rings lang
@@ -427,41 +379,37 @@ struct AnimatedTrendRing: View {
             .rotationEffect(.degrees(angleFromThree))
         }
         .frame(width: size, height: size)
-        // 🟢 Zwingt die View sich sauber neu aufzubauen, sobald neue Werte da sind
-        .id("\(dateString?.timeIntervalSince1970 ?? 0)_\(degree)")
-        .onAppear {
-            startHardwareAnimation(isRising: isRising, isFlat: isFlat)
-        }
+        .onChange(of: dateString) { _ in startHardwareAnimation(isRising: isRising, isFlat: isFlat) }
+        .onAppear { startHardwareAnimation(isRising: isRising, isFlat: isFlat) }
     }
 
     func startHardwareAnimation(isRising: Bool, isFlat: Bool) {
-        // 1. ZWINGENDER RESET (ohne Animation): Nur so startet SwiftUI die Loop sauber neu!
+        // Reset states to prevent glitches
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             tailRotation = 0
             breatheOffset = -1
-            sparkleOpacity = 0.1 // Startet dunkel
+            sparkleOpacity = 0.2
         }
 
-        // 2. LEICHTE VERZÖGERUNG: SwiftUI braucht diese Millisekunden, um den Reset zu rendern
+        // Hardware beschleunigte Animationen ausführen (15 Sekunden lang)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            // Die Atmung des Pfeils (Läuft endlos als Puls-Effekt weiter)
-            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                breatheOffset = 3 // Atmet um 3px nach außen
+            // 1. Die Atmung des Pfeils (Für alle Richtungen)
+            withAnimation(.easeInOut(duration: 1.0).repeatCount(15, autoreverses: true)) {
+                breatheOffset = 3 // Atmet um 4px nach außen
             }
 
-            // Der Orbit oder das Funkeln auf dem Ring (Streng auf 10 Sekunden limitiert)
+            // 2. Der Orbit oder das Funkeln
             if isFlat {
-                // 20 Wiederholungen x 0,5 Sekunden = Genau 10 Sekunden Glühen
-                withAnimation(.easeInOut(duration: 0.5).repeatCount(20, autoreverses: true)) {
-                    sparkleOpacity = 0.9 // Leuchtet hell auf!
+                // Funkeln: 15 Sekunden lang
+                withAnimation(.easeInOut(duration: 0.5).repeatCount(30, autoreverses: true)) {
+                    sparkleOpacity = 0.9
                 }
             } else {
-                // 10 volle Umdrehungen x 1,0 Sekunden = Genau 10 Sekunden
-                withAnimation(.linear(duration: 1.0).repeatCount(10, autoreverses: false)) {
-                    // Steigend: Gegen den Uhrzeigersinn (-360)
-                    // Fallend: Im Uhrzeigersinn (360)
+                // Orbit: Macht 10 volle Umdrehungen in 15 Sekunden
+                withAnimation(.linear(duration: 1.5).repeatCount(10, autoreverses: false)) {
+                    // Steigend: Gegen den Uhrzeigersinn (-360). Fallend: Im Uhrzeigersinn (360)
                     tailRotation = isRising ? -360 : 360
                 }
             }

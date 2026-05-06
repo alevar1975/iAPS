@@ -53,8 +53,20 @@ extension LiveActivityAttributes.ContentState {
         }
 
         let formattedBG = Self.formatGlucose(Int(glucose), mmol: mmol, forceSign: false)
-        let trendString = bg?.direction
-        let change = Self.formatGlucose(Int((bg?.glucose ?? 0) - (prev?.glucose ?? 0)), mmol: mmol, forceSign: true)
+
+        // 🟢 MEGA-FIX 3.0: Harte Delta-Regel auch für das Live Activity Banner
+        let currentBg = Int(glucose)
+        let prevBg = Int(prev?.glucose ?? Int16(currentBg))
+        let deltaInt = currentBg - prevBg
+
+        var trendString = "Flat"
+        if deltaInt > 10 { trendString = "DoubleUp" }
+        else if deltaInt > 5 { trendString = "SingleUp" }
+        else if deltaInt < -10 { trendString = "DoubleDown" }
+        else if deltaInt < -5 { trendString = "SingleDown" }
+        // else -> bleibt "Flat"
+
+        let change = Self.formatGlucose(deltaInt, mmol: mmol, forceSign: true)
         let cobString = Self.carbFormatter((suggestion.cob ?? 0) as NSNumber)
         let iobString = Self.formatter((iob ?? 0) as NSNumber)
         let eventual = Self.formatGlucose(suggestion.eventualBG ?? 100, mmol: mmol, forceSign: false)
@@ -196,7 +208,6 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
                 newSettings.liveActivityChart != knownSettings.liveActivityChart ||
                 newSettings.liveActivityChartShowPredictions != knownSettings.liveActivityChartShowPredictions
             {
-                print("live activity settings changed")
                 forceActivityUpdate(force: true)
             }
         }
@@ -215,11 +226,7 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
         }
     }
 
-    /// creates and tries to present a new activity update from the current Suggestion values if live activities are enabled in settings
-    /// Ends existing live activities if live activities are not enabled in settings
     private func forceActivityUpdate(force: Bool = false) {
-        // just before app resigns active, show a new activity
-        // only do this if there is no current activity or the current activity is older than 1h
         if settings.useLiveActivity {
             if force || currentActivity?.needsRecreation() ?? true,
                let suggestion = storage.retrieveFile(OpenAPS.Enact.suggested, as: Suggestion.self)
@@ -233,9 +240,7 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
         }
     }
 
-    /// attempts to present this live activity state, creating a new activity if none exists yet
     @MainActor private func pushUpdate(_ state: LiveActivityAttributes.ContentState) async {
-        // hide duplicate/unknown activities
         for unknownActivity in Activity<LiveActivityAttributes>.activities
             .filter({ self.currentActivity?.activity.id != $0.id })
         {
@@ -244,7 +249,6 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
 
         if let currentActivity {
             if currentActivity.needsRecreation(), UIApplication.shared.applicationState == .active {
-                // activity is no longer visible or old. End it and try to push the update again
                 await endActivity()
                 await pushUpdate(state)
             } else {
@@ -258,10 +262,7 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
                 }()
 
                 let content = {
-                    if encodedLength > 4 * 1024 { // size limit
-                        print(
-                            "live activity payload maximum size exceeded: \(encodedLength) bytes, updating live activity without predictions"
-                        )
+                    if encodedLength > 4 * 1024 {
                         return ActivityContent(
                             state: state.withoutPredictions(),
                             staleDate: Date.now.addingTimeInterval(TimeInterval(12 * 60))
@@ -278,9 +279,6 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
             }
         } else {
             do {
-                // always push a non-stale content as the first update
-                // pushing a stale content as the first content results in the activity not being shown at all
-                // we want it shown though even if it is iniially stale, as we expect new BG readings to become available soon, which should then be displayed
                 let settings = self.settings
                 let nonStale = ActivityContent(
                     state: LiveActivityAttributes.ContentState(
@@ -308,7 +306,6 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
 
                 currentActivity = ActiveActivity(activity: activity, startDate: Date.now)
 
-                // then show the actual content
                 await pushUpdate(state)
             } catch {
                 print("activity creation error: \(error)")
@@ -316,14 +313,12 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
         }
     }
 
-    /// ends all live activities immediateny
     private func endActivity() async {
         if let currentActivity {
             await currentActivity.activity.end(nil, dismissalPolicy: .immediate)
             self.currentActivity = nil
         }
 
-        // end any other activities
         for unknownActivity in Activity<LiveActivityAttributes>.activities {
             await unknownActivity.end(nil, dismissalPolicy: .immediate)
         }
@@ -340,9 +335,7 @@ extension LiveActivityBridge: SuggestionObserver, EnactedSuggestionObserver, Pum
 
         guard settings.useLiveActivity else {
             if currentActivity != nil {
-                Task {
-                    await self.endActivity()
-                }
+                Task { await self.endActivity() }
             }
             return
         }
@@ -364,13 +357,9 @@ extension LiveActivityBridge: SuggestionObserver, EnactedSuggestionObserver, Pum
             showChart: settings.liveActivityChart,
             chartLowThreshold: Int(settings.low),
             chartHighThreshold: Int(settings.high)
-        ) else {
-            return
-        }
+        ) else { return }
 
-        Task {
-            await self.pushUpdate(content)
-        }
+        Task { await self.pushUpdate(content) }
     }
 
     func suggestionDidUpdate(_ suggestion: Suggestion) {
@@ -378,9 +367,7 @@ extension LiveActivityBridge: SuggestionObserver, EnactedSuggestionObserver, Pum
 
         guard settings.useLiveActivity else {
             if currentActivity != nil {
-                Task {
-                    await self.endActivity()
-                }
+                Task { await self.endActivity() }
             }
             return
         }
@@ -402,12 +389,8 @@ extension LiveActivityBridge: SuggestionObserver, EnactedSuggestionObserver, Pum
             showChart: settings.liveActivityChart,
             chartLowThreshold: Int(settings.low),
             chartHighThreshold: Int(settings.high)
-        ) else {
-            return
-        }
+        ) else { return }
 
-        Task {
-            await self.pushUpdate(content)
-        }
+        Task { await self.pushUpdate(content) }
     }
 }
