@@ -54,17 +54,16 @@ extension LiveActivityAttributes.ContentState {
 
         let formattedBG = Self.formatGlucose(Int(glucose), mmol: mmol, forceSign: false)
 
-        // 🟢 MEGA-FIX 3.0: Harte Delta-Regel auch für das Live Activity Banner
+        // 🟢 MEGA-FIX 5.0: Echte Unicode-Pfeile zwingend berechnen. "Flat" als Text ist Geschichte.
         let currentBg = Int(glucose)
         let prevBg = Int(prev?.glucose ?? Int16(currentBg))
         let deltaInt = currentBg - prevBg
 
-        var trendString = "Flat"
-        if deltaInt > 10 { trendString = "DoubleUp" }
-        else if deltaInt > 5 { trendString = "SingleUp" }
-        else if deltaInt < -10 { trendString = "DoubleDown" }
-        else if deltaInt < -5 { trendString = "SingleDown" }
-        // else -> bleibt "Flat"
+        var trendString = "→" // Echter flacher Pfeil
+        if deltaInt >= 10 { trendString = "⇈" }
+        else if deltaInt >= 4 { trendString = "↗︎" }
+        else if deltaInt <= -10 { trendString = "⇊" }
+        else if deltaInt <= -4 { trendString = "↘︎" }
 
         let change = Self.formatGlucose(deltaInt, mmol: mmol, forceSign: true)
         let cobString = Self.carbFormatter((suggestion.cob ?? 0) as NSNumber)

@@ -205,7 +205,34 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
 
         addAppBadge(glucose: lastGlucose.glucose)
 
-        guard glucoseStorage.alarm != nil || settingsManager.settings.glucoseNotificationsAlways else {
+        // 🟢 MEGA-FIX 5.0: Transmitter-Lügen gnadenlos abfangen
+        // Der Alarm-Trigger wird jetzt anhand der ECHTEN Mathematik überschrieben
+        var activeAlarm = glucoseStorage.alarm
+        let delta = glucose.count >= 2 ? glucoseValue - (glucose[glucose.count - 2].glucose ?? 0) : nil
+
+        if let d = delta {
+            // Fehlalarme löschen: Wenn der Transmitter Rapid Ascending/Descending brüllt, aber das Delta flach ist (< 10)
+            if activeAlarm == .ascending || activeAlarm == .descending, abs(d) < 10 {
+                activeAlarm = .none
+            }
+            // Fehlende Alarme setzen: Wenn das Delta massiv ist, der Transmitter es aber verschlafen hat
+            if d >= 10, Decimal(glucoseValue) > settingsManager.settings.lowGlucose,
+               Decimal(glucoseValue) < settingsManager.settings.highGlucose
+            {
+                activeAlarm = .ascending
+            }
+            if d <= -10, Decimal(glucoseValue) < settingsManager.settings.highGlucose {
+                activeAlarm = .descending
+            }
+            // High/Low hat immer absolute Priorität
+            if Decimal(glucoseValue) <= settingsManager.settings.lowGlucose {
+                activeAlarm = .low
+            } else if Decimal(glucoseValue) >= settingsManager.settings.highGlucose {
+                activeAlarm = .high
+            }
+        }
+
+        guard activeAlarm != nil || settingsManager.settings.glucoseNotificationsAlways else {
             return
         }
 
@@ -214,7 +241,7 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
             var sound: String = "New/Anticipalte.caf"
             var alert = true
 
-            switch self.glucoseStorage.alarm {
+            switch activeAlarm {
             case .none:
                 titles.append(NSLocalizedString("Glucose", comment: "Glucose"))
                 sound = "Silent"
@@ -234,9 +261,10 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
                 titles.append(NSLocalizedString("RAPIDLY DESCENDING GLUCOSE!", comment: "RAPIDLY DESCENDING GLUCOSE!"))
                 sound = self.settingsManager.settings.descending
                 alert = self.settingsManager.settings.descendingAlert
+            case .some:
+                break
             }
 
-            let delta = glucose.count >= 2 ? glucoseValue - (glucose[glucose.count - 2].glucose ?? 0) : nil
             let body = self.glucoseText(glucoseValue: glucoseValue, delta: delta, direction: lastGlucose.direction) + self
                 .infoBody()
 
@@ -268,7 +296,17 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
                 units == .mmolL ? glucoseValue
                     .asMmolL : Decimal(glucoseValue)
             ) as NSNumber)! + " " + NSLocalizedString(units.rawValue, comment: "units")
-        let directionText = direction?.symbol ?? "↔︎"
+
+        // 🟢 MEGA-FIX 5.0: Richtung in der Notification aus echter Delta-Mathematik erzwingen!
+        var directionText = direction?.symbol ?? "↔︎"
+        if let d = delta {
+            if d >= 10 { directionText = "⇈" }
+            else if d >= 4 { directionText = "↗︎" }
+            else if d <= -10 { directionText = "⇊" }
+            else if d <= -4 { directionText = "↘︎" }
+            else { directionText = "→" }
+        }
+
         let deltaText = delta
             .map {
                 self.deltaFormatter
