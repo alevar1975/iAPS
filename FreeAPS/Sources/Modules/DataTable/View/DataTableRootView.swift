@@ -163,6 +163,7 @@ extension DataTable {
             }
         }
 
+        // 🟢 Leichtgewichtige glucoseList zur Vermeidung von Compiler-Timeouts
         private var glucoseList: some View {
             List {
                 HStack {
@@ -176,9 +177,10 @@ extension DataTable {
                     Spacer()
                     Text("Time").foregroundStyle(.secondary)
                 }
+
                 if !state.glucose.isEmpty {
-                    ForEach(state.glucose) { item in
-                        glucoseView(item, isManual: item.glucose)
+                    ForEach(Array(state.glucose.enumerated()), id: \.element.id) { index, item in
+                        glucoseView(item, isManual: item.glucose, delta: getDelta(for: index))
                     }
                 } else {
                     HStack {
@@ -186,6 +188,18 @@ extension DataTable {
                     }
                 }
             }
+        }
+
+        // 🟢 Ausgelagerte Funktion zur Entlastung des Compilers bei der Typüberprüfung
+        private func getDelta(for index: Int) -> Int? {
+            guard index + 1 < state.glucose.count else { return nil }
+
+            if let currentG = state.glucose[index].glucose.glucose,
+               let previousG = state.glucose[index + 1].glucose.glucose
+            {
+                return currentG - previousG
+            }
+            return nil
         }
 
         var addGlucoseView: some View {
@@ -239,7 +253,6 @@ extension DataTable {
                             .moveDisabled(true)
                     }.padding(.bottom, 1)
 
-                    // Horizontal adjustments
                     let leading: CGFloat = 28
                     let trailing: CGFloat = -100
                     let height: CGFloat = 15
@@ -328,12 +341,10 @@ extension DataTable {
                                 alertTitle = "Delete Carbs?"
                                 alertMessage = dateFormatter.string(from: item.date) + ", " + item.amountText
                             } else {
-                                // item is insulin treatment; item.type == .bolus
                                 alertTitle = "Delete Insulin?"
                                 alertMessage = dateFormatter.string(from: item.date) + ", " + item.amountText
 
                                 if item.isSMB ?? false {
-                                    // Add text snippet, so that alert message is more descriptive for SMBs
                                     alertMessage += "SMB"
                                 }
                             }
@@ -425,7 +436,7 @@ extension DataTable {
             }
         }
 
-        @ViewBuilder private func glucoseView(_ item: Glucose, isManual: BloodGlucose) -> some View {
+        @ViewBuilder private func glucoseView(_ item: Glucose, isManual: BloodGlucose, delta: Int?) -> some View {
             HStack {
                 Text(item.glucose.glucose.map {
                     (
@@ -437,10 +448,11 @@ extension DataTable {
                         state.units == .mmolL ? $0.asMmolL : Decimal($0)
                     ) as NSNumber)!
                 } ?? "--")
+
                 if isManual.type == GlucoseType.manual.rawValue {
                     Image(systemName: "drop.fill").symbolRenderingMode(.monochrome).foregroundStyle(.red)
                 } else {
-                    Text(item.glucose.direction?.symbol ?? "--")
+                    Text(arrowString(direction: item.glucose.direction, delta: delta))
                 }
                 Spacer()
 
@@ -490,7 +502,6 @@ extension DataTable {
                     label: { Text("Cancel") }.frame(maxWidth: .infinity, alignment: .trailing)
                         .tint(.blue).buttonStyle(.borderless).padding(.top, 20).padding(.trailing, 20)
                     Form {
-                        // Edit a meal
                         Section {
                             HStack {
                                 Text("Carbs")
@@ -553,6 +564,36 @@ extension DataTable {
                     ($0.date ?? .distantPast).timeIntervalSince(date) > -1.0 && ($0.date ?? .distantPast)
                         .timeIntervalSince(date) < 1
                 })
+        }
+
+        // 🟢 Identische Schwellenwert-Pfeillogik wie im Hauptbildschirm (mg/dL)
+        private func arrowString(direction: BloodGlucose.Direction?, delta: Int?) -> String {
+            if let deltaInt = delta {
+                if deltaInt > 10 { return "↑↑" }
+                else if deltaInt > 5 { return "↗" }
+                else if deltaInt < -10 { return "↓↓" }
+                else if deltaInt < -5 { return "↘" }
+                else { return "→" }
+            }
+
+            if let direction = direction {
+                switch direction {
+                case .doubleUp,
+                     .tripleUp: return "↑↑"
+                case .fortyFiveUp,
+                     .singleUp: return "↗"
+                case .flat: return "→"
+                case .fortyFiveDown,
+                     .singleDown: return "↘"
+                case .doubleDown,
+                     .tripleDown: return "↓↓"
+                case .none,
+                     .notComputable,
+                     .rateOutOfRange: break
+                }
+            }
+
+            return "--"
         }
     }
 }
